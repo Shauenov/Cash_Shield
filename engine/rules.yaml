@@ -1,0 +1,29 @@
+version: thresholds-frozen
+weights:
+  S1: 30
+  S2: 20
+  S3: 15
+  S4: 30
+  S5: 15
+  S6: 20
+  S7: 20
+  S8: 40
+  S9: -15
+  S10: 10
+  S11: 20
+params:
+  window_hours: 24
+  balance_share_min: 0.8
+  cash_large_min_kzt: 300000
+  cash_large_median_mult: 5
+  series_min_ops: 2
+  series_min_total_kzt: 1000000
+  new_payee_min_kzt: 200000
+  phone_at_ear_min_sec: 3
+  escalation_window_hours: 24
+thresholds:
+  ask: 40
+  pause: 55
+  hold: 85
+pause_minutes: 30
+camera_enabled: true

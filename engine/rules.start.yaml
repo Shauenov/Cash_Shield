@@ -1,0 +1,36 @@
+# Cash Shield risk engine rules. Weights and thresholds are starting hypotheses
+# until `python tasks.py tune` selects values on the TUNE set. Frozen with the
+# tag `thresholds-frozen`; never edit after the single holdout measurement.
+version: "starting-hypotheses"
+
+weights:
+  S1: 35    # loan issued < 24h ago
+  S2: 20    # >= 80% of 24h-start balance moved out in 24h
+  S3: 15    # first large cash withdrawal (>= 300k and >= 5x customer median)
+  S4: 20    # series of withdrawals: >= 2 in 24h totalling >= 1M
+  S5: 15    # transfer >= 200k to a never-seen payee
+  S6: 20    # deposit closed early < 24h ago
+  S7: 15    # S5 and S6 together
+  S8: 40    # customer pressed "scammer on the line" < 24h ago
+  S9: -15   # payee is a legal entity (dealer, developer)
+  S10: 10   # camera: phone at ear > 3s (optional)
+  S11: 20  # escalation: customer answered "no" to the question, then tries again
+
+params:
+  window_hours: 24
+  balance_share_min: 0.80
+  cash_large_min_kzt: 300000
+  cash_large_median_mult: 5
+  series_min_ops: 2
+  series_min_total_kzt: 1000000
+  new_payee_min_kzt: 200000
+  phone_at_ear_min_sec: 3
+  escalation_window_hours: 24
+
+thresholds:
+  ask: 40      # 40..pause-1  -> ask a question
+  pause: 60    # 60..hold-1   -> pause + bank callback
+  hold: 85     # >= hold      -> hold until officer confirms
+
+pause_minutes: 30
+camera_enabled: true
