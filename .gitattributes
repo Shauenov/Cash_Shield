@@ -1,0 +1,6 @@
+# Keep LF everywhere: the frozen holdout is checked by SHA-256 and a CRLF checkout (Windows autocrlf) would break the check.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.mp4 binary
+*.woff2 binary
