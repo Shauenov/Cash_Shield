@@ -1,0 +1,22 @@
+services:
+  api:
+    build: { context: ., dockerfile: Dockerfile.api }
+    env_file: .env
+    environment:
+      DB_PATH: /app/state/cashshield.db
+    volumes:
+      - dbdata:/app/state
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/healthz')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # not published: only the web container reaches it (Docker network)
+  web:
+    build: { context: ., dockerfile: Dockerfile.web }
+    depends_on:
+      api: { condition: service_healthy }
+    ports:
+      - "8080:80"
+volumes:
+  dbdata:

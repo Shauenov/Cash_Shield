@@ -4,6 +4,8 @@
   test              unit tests with coverage of the engine
   eval [--set tune] metrics; default set is holdout (hash-checked, logged)
   tune              grid search on the TUNE set only
+  bench             1000 authorize calls, p95 latency
+  test-integration  API endpoint tests
 """
 import subprocess
 import sys
@@ -30,6 +32,10 @@ def main():
         run("eval/evaluate.py", *rest)
     elif task == "tune":
         run("eval/tune.py", *rest)
+    elif task == "bench":
+        run("eval/bench.py")
+    elif task == "test-integration":
+        run("-m", "pytest", "services/api/test_api.py", "-q", "-W", "ignore", *rest)
     else:
         print(__doc__)
 
