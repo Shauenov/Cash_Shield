@@ -84,8 +84,12 @@ cd web && npm install && npm run dev      # http://localhost:5173
 | `python tasks.py eval --set tune` | Same on the tuning set |
 | `python tasks.py tune` | Grid and coordinate search on the tuning set only |
 | `python tasks.py bench` | 1000 authorize calls, latency |
+| `python tasks.py demo-check` | Automated API-level rehearsal of the demo (10 runs) |
+| `python tasks.py redteam` | Scripted red team, writes `reports/redteam.md` |
 
 Demo customers: Gulnar apa (loan 3 h ago), Marat (control), Aigerim (deposit closed 1 h ago), Serik (buying a car), Bolat (cash desk), Dana. The **Reset demo** button in the officer console restores them.
+
+Demo: the 3-minute script is in `docs/demo-script.md`. A silent, captioned backup walkthrough built from real screenshots of the running app is `pitch/demo-backup.mp4` (about 70 seconds; rebuild with `python pitch/make_video.py`). It is a walkthrough, not a screen recording with narration.
 
 ## 4. Metrics (holdout, measured once)
 
@@ -168,4 +172,4 @@ docs/         api.md, architecture image
 
 ## 10. Changes after the freeze
 
-Packaging and evidence only (Docker files, README, `bench.py`, `test-integration` task, `redteam.py` and its log). No change to weights, thresholds, scenarios or engine code. Any bug fix after the single holdout measurement must be listed here with its reason.
+Packaging and evidence only (Docker files, README, `bench.py`, `test-integration` task, `redteam.py` and its log, `demo_check.py`, demo script and backup video). No change to weights, thresholds, scenarios or engine code. Any bug fix after the single holdout measurement must be listed here with its reason.

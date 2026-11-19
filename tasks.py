@@ -6,6 +6,8 @@
   tune              grid search on the TUNE set only
   bench             1000 authorize calls, p95 latency
   test-integration  API endpoint tests
+  demo-check [N]    automated API-level rehearsal of the demo (default 10 runs)
+  redteam           scripted red team, writes reports/redteam.md
 """
 import subprocess
 import sys
@@ -32,6 +34,10 @@ def main():
         run("eval/evaluate.py", *rest)
     elif task == "tune":
         run("eval/tune.py", *rest)
+    elif task == "demo-check":
+        run("eval/demo_check.py", *rest)
+    elif task == "redteam":
+        run("eval/redteam.py")
     elif task == "bench":
         run("eval/bench.py")
     elif task == "test-integration":
