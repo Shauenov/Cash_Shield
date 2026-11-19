@@ -14,7 +14,7 @@ Service calls (`/v1/decisions`) need `X-Service-Token`. Officer actions need `X-
 | `POST /v1/consents`, `DELETE /v1/consents/{id}` | app | Give or withdraw consent for the trusted person. Withdrawal takes effect after 24 h |
 | `GET /v1/events`, `WS /v1/events/stream` | officer console | Event log and live stream |
 | `GET /v1/held`, `GET /v1/customers` | officer console, screens | Held decisions; demo customers |
-| `POST /v1/demo-reset`, `POST /v1/demo-engine-down` | demo only | Reset the database; simulate an engine outage |
+| `POST /v1/demo-reset`, `POST /v1/demo-engine-down`, `POST /v1/demo-time-skip?hours=N` | demo only | Reset the database; simulate an engine outage; move stored events N hours into the past (for the blind red team) |
 | `GET /healthz` | Docker, tests | Liveness |
 
 Authorize body (`channel`: atm, cash_desk or app; `type`: cash_withdrawal or transfer):

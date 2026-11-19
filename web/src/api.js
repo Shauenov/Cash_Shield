@@ -18,6 +18,7 @@ export const api = {
   events: () => call('/v1/events?limit=100'),
   held: () => call('/v1/held'),
   reset: () => call('/v1/demo-reset', { method: 'POST' }),
+  skipTime: (hours) => call(`/v1/demo-time-skip?hours=${hours}`, { method: 'POST' }),
   engineDown: (down) => call(`/v1/demo-engine-down?down=${down}`, { method: 'POST' }),
 }
 

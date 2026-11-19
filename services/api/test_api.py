@@ -144,3 +144,17 @@ def test_every_non_allow_event_has_reasons():
     for e in client.get("/v1/events").json():
         if e["kind"] == "decision" and e["decision"] != "allow":
             assert e["reasons"]
+
+
+def test_demo_time_skip_expires_the_fresh_loan_signal():
+    first = client.post("/mock-host/authorize", json=body("c_gulnar", 100_000)).json()
+    assert "S1" in [r["signal"] for r in first["reasons"]]
+    assert client.post("/v1/demo-time-skip?hours=25").json() == {"skipped_hours": 25}
+    after = client.post("/mock-host/authorize", json=body("c_gulnar", 100_000)).json()
+    assert "S1" not in [r["signal"] for r in after["reasons"]]
+    assert "demo_time_skip" in [e["kind"] for e in client.get("/v1/events").json()]
+
+
+def test_demo_time_skip_validates_hours():
+    assert client.post("/v1/demo-time-skip?hours=0").status_code == 422
+    assert client.post("/v1/demo-time-skip?hours=9999").status_code == 422

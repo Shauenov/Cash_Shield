@@ -9,6 +9,7 @@
   demo-check [N]    automated API-level rehearsal of the demo (default 10 runs)
   redteam           scripted red team, writes reports/redteam.md
   usability         score the pause-screen usability test from reports/usability_data.csv
+  redteam-blind     summarize the blind red team from reports/redteam_blind_data.csv
 """
 import subprocess
 import sys
@@ -37,6 +38,8 @@ def main():
         run("eval/tune.py", *rest)
     elif task == "demo-check":
         run("eval/demo_check.py", *rest)
+    elif task == "redteam-blind":
+        run("eval/redteam_blind.py", *rest)
     elif task == "usability":
         run("eval/usability.py", *rest)
     elif task == "redteam":

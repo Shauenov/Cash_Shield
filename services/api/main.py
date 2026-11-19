@@ -452,6 +452,27 @@ def demo_reset():
     return {"status": "reset"}
 
 
+@app.post("/v1/demo-time-skip")
+def demo_time_skip(hours: int = 24):
+    """DEMO ONLY: simulate time passing by moving every stored event `hours` into the past
+    (loans, closed deposits, reports, executed operations, pending consent revocations).
+    Used by the blind red team so a tester can 'wait a day' without waiting. The engine is not touched."""
+    if not 1 <= hours <= 24 * 14:
+        raise HTTPException(422, "hours must be between 1 and 336")
+    delta = timedelta(hours=hours)
+    with LOCK:
+        for col in ("loan_issued_at", "deposit_closed_at", "report_at"):
+            for r in DB.execute(f"SELECT customer_id, {col} AS v FROM customers WHERE {col} IS NOT NULL").fetchall():
+                DB.execute(f"UPDATE customers SET {col}=? WHERE customer_id=?", (iso(parse(r["v"]) - delta), r["customer_id"]))
+        for r in DB.execute("SELECT id, ts FROM history").fetchall():
+            DB.execute("UPDATE history SET ts=? WHERE id=?", (iso(parse(r["ts"]) - delta), r["id"]))
+        for r in DB.execute("SELECT consent_id, revoke_effective_at AS v FROM consents WHERE revoke_effective_at IS NOT NULL").fetchall():
+            DB.execute("UPDATE consents SET revoke_effective_at=? WHERE consent_id=?", (iso(parse(r["v"]) - delta), r["consent_id"]))
+        DB.commit()
+    log_event("demo_time_skip", actor="demo", comment=f"all stored events moved {hours} h into the past")
+    return {"skipped_hours": hours}
+
+
 @app.post("/v1/demo-engine-down")
 def demo_engine_down(down: bool = True):
     FORCE_ENGINE_DOWN["on"] = down

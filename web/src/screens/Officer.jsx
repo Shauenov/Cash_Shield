@@ -39,6 +39,7 @@ export default function Officer() {
         <h1>Officer console</h1>
         <div className="row">
           <button className="small secondary" onClick={async () => { await api.engineDown(!down); setDown(!down) }}>{down ? 'Engine: DOWN (click to restore)' : 'Simulate engine outage'}</button>
+          <button className="small secondary" onClick={async () => { await api.skipTime(24); load() }}>Demo: skip time +24 h</button>
           <button className="small secondary" onClick={async () => { await api.reset(); setDown(false); load() }}>Reset demo</button>
         </div>
       </div>
