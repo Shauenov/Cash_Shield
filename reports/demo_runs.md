@@ -1,6 +1,6 @@
 # Demo rehearsal (API level, automated)
 
-3 of 3 runs passed, 16 checks per run, frozen rules.
+10 of 10 runs passed, 16 checks per run, frozen rules.
 
 Covers: decisions, scores, trusted-person notification (simulated), officer actions, fail-open. Does NOT cover: the screens, the camera switch, real Telegram, a live audience.
 
