@@ -24,6 +24,7 @@ export function Lang({ lang, setLang }) {
     <span className="lang" role="group" aria-label="Language">
       <button className={lang === 'en' ? 'on' : ''} onClick={() => setLang('en')}>EN</button>
       <button className={lang === 'kz' ? 'on' : ''} onClick={() => setLang('kz')}>KZ</button>
+      <button className={lang === 'ru' ? 'on' : ''} onClick={() => setLang('ru')}>RU</button>
     </span>
   )
 }

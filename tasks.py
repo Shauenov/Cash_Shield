@@ -8,6 +8,7 @@
   test-integration  API endpoint tests
   demo-check [N]    automated API-level rehearsal of the demo (default 10 runs)
   redteam           scripted red team, writes reports/redteam.md
+  usability         score the pause-screen usability test from reports/usability_data.csv
 """
 import subprocess
 import sys
@@ -36,6 +37,8 @@ def main():
         run("eval/tune.py", *rest)
     elif task == "demo-check":
         run("eval/demo_check.py", *rest)
+    elif task == "usability":
+        run("eval/usability.py", *rest)
     elif task == "redteam":
         run("eval/redteam.py")
     elif task == "bench":

@@ -35,6 +35,18 @@ export const T = {
     declined: 'The operation was cancelled to protect you.', done: 'Done. Please take your cash.',
     doneTransfer: 'Transfer sent.', wait: 'Waiting for a bank officer…',
   },
+  ru: {
+    // Question, buttons and the three pause lines are from the plan. The other lines were
+    // translated by the team and, like all texts here, need a native-speaker review.
+    question: 'Вас по телефону просят снять или перевести деньги?',
+    yes: 'Да, просят', no: 'Нет, это моё решение',
+    pause1: 'Мы приостановили операцию на 30 минут. Ваши деньги на счёте и в безопасности.',
+    pause2: 'Сотрудники банка, полиции и Нацбанка никогда не просят снимать деньги и отдавать их курьеру.',
+    pause3: 'Банк свяжется с вами только через приложение. Не верьте другим звонкам.',
+    callBank: 'Позвонить в банк из приложения', released: 'Сотрудник банка подтвердил операцию. Она проводится.',
+    declined: 'Операция отменена для вашей защиты.', done: 'Готово. Заберите наличные.',
+    doneTransfer: 'Перевод отправлен.', wait: 'Ждём решения сотрудника банка…',
+  },
   kz: {
     question: 'Сізден телефон арқылы ақша шешуді немесе аударуды сұрап жатыр ма?',
     yes: 'Иә, сұрап жатыр', no: 'Жоқ, бұл өз шешімім',
