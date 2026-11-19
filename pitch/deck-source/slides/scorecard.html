@@ -1,0 +1,17 @@
+<section id="scorecard" class="light" data-transition="fade">
+<p class="eyebrow">THE EVIDENCE</p>
+<h2>Holdout: 180 synthetic scenarios, measured once</h2>
+<table>
+<tr><th style="width:700px">Metric</th><th style="width:240px">Result</th><th style="width:300px">Target</th><th style="width:424px">Verdict</th></tr>
+<tr><td>Fraud scenarios stopped (recall)</td><td style="color:#0D2B30">78.3%</td><td>85%</td><td style="color:#8A5A00">Target missed, minimum met</td></tr>
+<tr><td>Normal scenarios bothered</td><td style="color:#0D2B30">4.2%</td><td>5% or less</td><td style="color:#0E6A47">Met</td></tr>
+<tr><td>Normal scenarios paused</td><td style="color:#0D2B30">0.0%</td><td>1% or less</td><td style="color:#0E6A47">Met</td></tr>
+<tr><td>Fraud money kept</td><td style="color:#0D2B30">71.5%</td><td>70% or more</td><td style="color:#0E6A47">Met</td></tr>
+<tr><td>Recall lost without camera</td><td style="color:#0D2B30">1.7 pp</td><td>3 pp or less</td><td style="color:#0E6A47">Met</td></tr>
+<tr><td>Evasion (split, headset, video)</td><td style="color:#0D2B30">78.6%</td><td>85%</td><td style="color:#8A5A00">Target missed, minimum met</td></tr>
+<tr><td>Fairness gap between age groups</td><td style="color:#0D2B30">8.3 pp</td><td>5 pp or less</td><td style="color:#B3261E">FAIL: over the 8 pp limit</td></tr>
+</table>
+<p class="note">Thresholds were frozen before the measurement. Reproduce it with one command: python tasks.py eval. The data is invented by our team, so this shows the mechanism works, not what a real bank would save.</p>
+<div class="foot"><span>Cash Shield · holdout SHA-256 starts 6cf7a713</span><span class="pg"></span></div>
+<aside>2:00–2:35. Say the three numbers first: recall 78.3%, 4.2% of normal scenarios bothered, 0% paused. Then the honest part: the 85% target was missed and the age fairness metric failed. Age is not used by the engine; the groups are small (23, 36 and 61 normal scenarios), so one scenario moves a group by several points, but we report it as a FAIL. The holdout was made after the rules were frozen, with shifted amounts and gaps, and measured once. Everything is one team’s synthetic data.</aside>
+</section>

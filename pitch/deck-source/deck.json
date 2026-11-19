@@ -1,0 +1,18 @@
+{
+  "v": 5,
+  "createdOnFiles": { "v": 1, "at": "2026-11-19T10:00:00Z" },
+  "lists": "css",
+  "format": { "v": 1, "shared": ["project/deck.css"] },
+  "title": "Cash Shield",
+  "order": ["cover", "scale", "chain", "engine", "ladder", "scorecard", "limits", "ask"],
+  "sections": {
+    "s1": { "description": "The problem: customers are coached to move their own money, so the bank sees normal operations.", "start": "cover" },
+    "s2": { "description": "The solution: one risk engine for ATM, cash desk and app, with intervention that grows with risk.", "start": "engine" },
+    "s3": { "description": "The evidence, the honest limits and the request to the bank.", "start": "scorecard" }
+  },
+  "faces": {
+    "space-grotesk": { "family": "Space Grotesk", "href": "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400..700&display=swap" },
+    "inter": { "family": "Inter", "href": "https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" }
+  },
+  "designSystems": []
+}

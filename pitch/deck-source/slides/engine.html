@@ -1,0 +1,25 @@
+<section id="engine" class="light" data-transition="fade">
+<p class="eyebrow">THE SOLUTION</p>
+<h2>One engine, three channels</h2>
+<div class="flow">
+<div class="col" style="width:300px">
+<div class="node">ATM</div>
+<div class="node">Cash desk</div>
+<div class="node">Mobile app</div>
+</div>
+<x-shape kind="arrow-right" style="width:64px;height:40px;background:#0E7A52"></x-shape>
+<div class="node" style="width:340px">Bank authorization host<span>mocked in the demo; only it can hold cash</span></div>
+<x-shape kind="arrow-right" style="width:64px;height:40px;background:#0E7A52"></x-shape>
+<div class="node core" style="width:360px">Risk engine<span>11 bank signals, reasons for every decision</span></div>
+<x-shape kind="arrow-right" style="width:64px;height:40px;background:#0E7A52"></x-shape>
+<div class="col" style="width:240px">
+<div class="out">Allow</div>
+<div class="out">Ask</div>
+<div class="out">Pause</div>
+<div class="out">Hold</div>
+</div>
+</div>
+<p class="note">Decisions rest on bank data. Age is not used. The camera is an optional extra signal worth +10 points. If the engine is silent for 500 ms, the host approves, so a fault never blocks cash.</p>
+<div class="foot"><span>Cash Shield · all data in this deck’s demo is synthetic</span><span class="pg"></span></div>
+<aside>1:15–1:40. The same logic runs for the ATM, the cash desk and the app. Signals: fresh loan, share of balance moved, large cash, a series of withdrawals, new recipient, closed deposit, the scammer button, company recipient, and an escalation signal when the customer says no and tries again. Camera is optional; without it recall drops only 1.7 points. In the demo the authorization host is mocked: in a real bank it is the only place that can hold a withdrawal.</aside>
+</section>

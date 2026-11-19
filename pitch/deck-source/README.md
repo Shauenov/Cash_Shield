@@ -1,0 +1,1 @@
+﻿Source files of the 8-slide pitch deck (Slides artifact: https://claude.ai/artifact/J1m145875CCCRh57K2QFyz, private to the owner). deck.json is the index, deck.css the shared style, slides/ one HTML file per slide with speaker notes (timed to 3 minutes).
