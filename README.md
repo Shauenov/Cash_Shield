@@ -107,7 +107,7 @@ Thresholds were frozen (tag `thresholds-frozen`) before the measurement; see `re
 | 6 | Money saved | 71.5% | >= 70% | >= 55% | PASS |
 | 7 | Recall drop without camera | 1.7 pp | <= 3 pp | <= 5 pp | PASS |
 | 8 | Evasion recall (split, headset, video) | 78.6% (14 scenarios) | >= 85% | >= 75% | PASS, target missed |
-| 9 | Latency p95 (in-process, 1000 calls) | about 10 ms | <= 300 ms | <= 500 ms | PASS |
+| 9 | Latency p95 (1000 calls; about 10 ms in-process on the host, 57 ms inside the Docker container) | 57 ms worst case | <= 300 ms | <= 500 ms | PASS |
 | 10 | Explainability | 100% | 100% | 100% | PASS |
 | 11 | Fairness gap by age group | 8.3 pp | <= 5 pp | <= 8 pp | **FAIL** |
 
@@ -173,4 +173,4 @@ docs/         api.md, architecture image
 
 ## 10. Changes after the freeze
 
-Packaging and evidence only (Docker files, README, `bench.py`, `test-integration` task, `redteam.py` and its log, `demo_check.py`, demo script and backup video). No change to weights, thresholds, scenarios or engine code. Any bug fix after the single holdout measurement must be listed here with its reason.
+Packaging and evidence only (`.gitattributes` forcing LF line endings, found by the clean-clone check in `reports/clean_machine_check.md`; Docker files, README, `bench.py`, `test-integration` task, `redteam.py` and its log, `demo_check.py`, demo script and backup video). No change to weights, thresholds, scenarios or engine code. Any bug fix after the single holdout measurement must be listed here with its reason.
