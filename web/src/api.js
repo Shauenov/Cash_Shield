@@ -35,6 +35,8 @@ export const T = {
     callBank: 'Call the bank from the app', released: 'Approved by the bank officer. Your operation is going through.',
     declined: 'The operation was cancelled to protect you.', done: 'Done. Please take your cash.',
     doneTransfer: 'Transfer sent.', wait: 'Waiting for a bank officer…',
+    nofunds: 'Not enough money in the account.',
+    expired: 'The pause has ended. The operation was cancelled and your money is still in your account. You can start a new operation.',
   },
   ru: {
     // Question, buttons and the three pause lines are from the plan. The other lines were
@@ -47,6 +49,8 @@ export const T = {
     callBank: 'Позвонить в банк из приложения', released: 'Сотрудник банка подтвердил операцию. Она проводится.',
     declined: 'Операция отменена для вашей защиты.', done: 'Готово. Заберите наличные.',
     doneTransfer: 'Перевод отправлен.', wait: 'Ждём решения сотрудника банка…',
+    nofunds: 'Недостаточно средств на счёте.',
+    expired: 'Пауза закончилась. Операция отменена, деньги остались на счёте. Можно начать новую операцию.',
   },
   kz: {
     question: 'Сізден телефон арқылы ақша шешуді немесе аударуды сұрап жатыр ма?',
@@ -57,5 +61,7 @@ export const T = {
     callBank: 'Қосымшадан банкке қоңырау шалу', released: 'Банк қызметкері растады. Операция өтіп жатыр.',
     declined: 'Сізді қорғау үшін операция тоқтатылды.', done: 'Дайын. Қолма-қол ақшаңызды алыңыз.',
     doneTransfer: 'Аударым жіберілді.', wait: 'Банк қызметкерін күтіңіз…',
+    nofunds: 'Шотта қаражат жеткіліксіз.',
+    expired: 'Үзіліс аяқталды. Операция тоқтатылды, ақшаңыз шотта қалды. Жаңа операция бастауға болады.',
   },
 }

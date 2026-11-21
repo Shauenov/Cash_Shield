@@ -16,7 +16,7 @@ export default function Atm() {
     terminal_id: atm, extra: camera ? { phone_at_ear_sec: 8 } : {},
   })
   const finish = () => { flow.reset(); ctl.reload() }
-  const cls = { form: '', question: 'ask', pause: 'pause', done: 'ok', released: 'ok', declined: 'pause' }[flow.phase]
+  const cls = { form: '', question: 'ask', pause: 'pause', done: 'ok', released: 'ok', declined: 'pause', expired: 'pause', nofunds: 'pause' }[flow.phase]
 
   return (
     <main>
@@ -55,6 +55,8 @@ export default function Atm() {
         {flow.phase === 'done' && <><h1>✔ {t.done}</h1><p>{kzt(flow.dec?.amount_kzt || Number(amount))}</p><button onClick={finish}>New operation</button></>}
         {flow.phase === 'released' && <><h1>✔ {t.released}</h1><button onClick={finish}>New operation</button></>}
         {flow.phase === 'declined' && <><h1>{t.declined}</h1><button onClick={finish}>New operation</button></>}
+        {flow.phase === 'expired' && <><h1>{t.expired}</h1><button onClick={finish}>New operation</button></>}
+        {flow.phase === 'nofunds' && <><h1>{t.nofunds}</h1><button onClick={finish}>New operation</button></>}
       </div>
     </main>
   )

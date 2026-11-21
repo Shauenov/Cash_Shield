@@ -14,7 +14,8 @@ from services.api import main  # noqa: E402
 
 
 def main_():
-    c = TestClient(main.app)
+    main.DEMO_MODE = True
+    c = TestClient(main.app, headers={"X-Service-Token": main.SERVICE_TOKEN})
     c.post("/v1/demo-reset")
     times = []
     for i in range(1000):

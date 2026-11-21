@@ -17,7 +17,8 @@ sys.path.insert(0, str(ROOT))
 from fastapi.testclient import TestClient  # noqa: E402
 from services.api import main  # noqa: E402
 
-client = TestClient(main.app)
+main.DEMO_MODE = True   # uses demo-reset / engine-down
+client = TestClient(main.app, headers={"X-Service-Token": main.SERVICE_TOKEN})
 n = [0]
 
 

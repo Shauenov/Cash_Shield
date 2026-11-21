@@ -14,6 +14,7 @@ services:
     # not published: only the web container reaches it (Docker network)
   web:
     build: { context: ., dockerfile: Dockerfile.web }
+    env_file: .env   # SERVICE_TOKEN for the proxy
     depends_on:
       api: { condition: service_healthy }
     ports:

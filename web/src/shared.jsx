@@ -54,7 +54,7 @@ export function Countdown({ until }) {
 
 /** Operation flow shared by ATM, cash desk and app. */
 export function useFlow() {
-  const [phase, setPhase] = useState('form')   // form | question | pause | done | released | declined
+  const [phase, setPhase] = useState('form')   // form | question | pause | done | released | declined | expired | nofunds
   const [dec, setDec] = useState(null)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
@@ -70,6 +70,7 @@ export function useFlow() {
         const d = await api.decision(id)
         if (d.status === 'approved') { stopPoll(); setPhase('released') }
         if (d.status === 'declined') { stopPoll(); setPhase('declined') }
+        if (d.status === 'expired') { stopPoll(); setPhase('expired') }
       } catch { /* keep polling */ }
     }, 1500)
   }
@@ -78,6 +79,7 @@ export function useFlow() {
     setDec(d)
     if (r.result === 'approve') setPhase('done')
     else if (r.result === 'ask') setPhase('question')
+    else if (r.result === 'decline') setPhase('nofunds')
     else { setPhase('pause'); startPoll(d.decision_id) }
   }
   const submit = async (body) => {

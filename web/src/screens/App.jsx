@@ -53,6 +53,8 @@ export default function App() {
             {flow.phase === 'done' && <><h2>✔ {t.doneTransfer}</h2><button onClick={finish}>Back</button></>}
             {flow.phase === 'released' && <><h2>✔ {t.released}</h2><button onClick={finish}>Back</button></>}
             {flow.phase === 'declined' && <><h2>{t.declined}</h2><button onClick={finish}>Back</button></>}
+            {flow.phase === 'expired' && <><h2>{t.expired}</h2><button onClick={finish}>Back</button></>}
+            {flow.phase === 'nofunds' && <><h2>{t.nofunds}</h2><button onClick={finish}>Back</button></>}
           </div>
         )}
 

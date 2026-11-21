@@ -34,8 +34,8 @@ export default function Desk() {
       )}
       {flow.phase !== 'form' && d && (
         <div className="card">
-          <h2>Risk score {d.score} <Pill d={d.decision} /></h2>
-          <Reasons reasons={d.reasons} />
+          {d.score != null && <><h2>Risk score {d.score} <Pill d={d.decision} /></h2>
+          <Reasons reasons={d.reasons} /></>}
           {flow.phase === 'done' && <p>✔ Payout completed: {kzt(d.amount_kzt)}.</p>}
           {flow.phase === 'question' && (
             <>
@@ -58,7 +58,9 @@ export default function Desk() {
           )}
           {flow.phase === 'released' && <p>✔ Officer released the operation. Pay out {kzt(d.amount_kzt)}.</p>}
           {flow.phase === 'declined' && <p>✖ Officer confirmed fraud. Operation cancelled.</p>}
-          {['done', 'released', 'declined'].includes(flow.phase) && <button onClick={finish}>Next customer</button>}
+          {flow.phase === 'expired' && <p>The pause ended without an officer decision. Operation cancelled; nothing was paid out.</p>}
+          {flow.phase === 'nofunds' && <p>✖ Not enough money in the account. Nothing was paid out.</p>}
+          {['done', 'released', 'declined', 'expired', 'nofunds'].includes(flow.phase) && <button onClick={finish}>Next customer</button>}
         </div>
       )}
     </main>

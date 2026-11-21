@@ -15,7 +15,7 @@ Run with `python eval/redteam.py` against the frozen rules (`thresholds-frozen`)
 | 6. Transfer to a recipient already known | Make the recipient look familiar | 2 200 000 | never | **YES (bypass)** |
 | 7. Transfer to a company (shell firm) | Use the company discount (S9) | 2 200 000 | never | **YES (bypass)** |
 | 8. Three transfers to three companies | Split across recipients and shells | 2 100 000 | never | **YES (bypass)** |
-| 9. Customer with no loan, normal cash | Plain savings, no loan, no deposit | 500 000 | op 2 | no |
+| 9. Customer with no loan, normal cash | Plain savings, no loan, no deposit | 500 000 | op 2 (no funds) | no |
 | 10. One 400k per day for six days | Stay under every 24-hour window | 2 400 000 | never | **YES (bypass)** |
 
 ## Traces (amount: decision(score), -> answer)
@@ -28,7 +28,7 @@ Run with `python eval/redteam.py` against the frozen rules (`thresholds-frozen`)
 - 6. Transfer to a recipient already known: `2200k:allow(30)`
 - 7. Transfer to a company (shell firm): `2200k:allow(30)`
 - 8. Three transfers to three companies: `700k:allow(30) 700k:allow(30) 700k:allow(30)`
-- 9. Customer with no loan, normal cash: `500k:allow(35) 500k:pause(65)->STOP`
+- 9. Customer with no loan, normal cash: `500k:allow(35) 500k:insufficient_funds->NO FUNDS, not an engine stop`
 - 10. One 400k per day for six days: `400k:ask(45)->no 400k:allow(15) 400k:allow(15) 400k:allow(15) 400k:allow(15) 400k:allow(15)`
 
 ## Result: 4 of 10 attempts reached the goal

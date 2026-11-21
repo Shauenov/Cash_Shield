@@ -22,7 +22,9 @@ from services.api import main  # noqa: E402
 
 TZ = timezone(timedelta(hours=5))
 GOAL = 2_000_000
-client = TestClient(main.app)
+main.DEMO_MODE = True               # uses demo-reset
+main.ALLOW_CLIENT_TIMESTAMP = True    # offline simulation: replays operations over several days
+client = TestClient(main.app, headers={"X-Service-Token": main.SERVICE_TOKEN})
 n = [0]
 
 
@@ -46,6 +48,11 @@ def attempt(customer, steps, title, idea):
         elif r["result"] == "approve":
             moved += amount
             trace.append(f"{amount // 1000}k:{d}({r['score']})")
+        elif d == "insufficient_funds":
+            # the host refused for lack of money: not an engine stop
+            stopped_at = f"op {len(trace) + 1} (no funds)"
+            trace.append(f"{amount // 1000}k:insufficient_funds->NO FUNDS, not an engine stop")
+            break
         else:
             stopped_at = f"op {len(trace) + 1}"
             trace.append(f"{amount // 1000}k:{d}({r['score']})->STOP")

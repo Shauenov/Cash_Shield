@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import hmac
 import json
 import os
 import sqlite3
@@ -20,12 +21,19 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
+
+# Without Docker nobody loads .env, so read it here. Real environment variables win.
+if (ROOT / ".env").exists():
+    for _line in (ROOT / ".env").read_text(encoding="utf-8").splitlines():
+        if "=" in _line and not _line.lstrip().startswith("#"):
+            _k, _v = _line.split("=", 1)
+            os.environ.setdefault(_k.strip(), _v.strip())
 
 from engine import Customer, Events, Operation, decide, load_rules  # noqa: E402
 from engine.signals import Executed  # noqa: E402
@@ -38,6 +46,10 @@ DB_PATH = os.getenv("DB_PATH", ":memory:")
 RULES_PATH = os.getenv("RULES_PATH")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_DEMO_CHAT_ID", "")
+# Demo-only endpoints (reset, time skip, engine outage switch) exist only when DEMO_MODE=1.
+DEMO_MODE = os.getenv("DEMO_MODE") == "1"
+# The host stamps the operation time. Only offline simulations (eval/redteam.py) may pass their own.
+ALLOW_CLIENT_TIMESTAMP = os.getenv("ALLOW_CLIENT_TIMESTAMP") == "1"
 
 RULES = load_rules(Path(RULES_PATH) if RULES_PATH else None)
 LOCK = threading.RLock()
@@ -144,8 +156,18 @@ async def _startup() -> None:
 
 
 def need_token(x_service_token: str = Header(default="")) -> None:
-    if x_service_token != SERVICE_TOKEN:
+    if not hmac.compare_digest(x_service_token, SERVICE_TOKEN):
         raise HTTPException(401, "bad or missing X-Service-Token")
+
+
+def need_demo() -> None:
+    if not DEMO_MODE:
+        raise HTTPException(404, "not found")
+
+
+# Every endpoint except /healthz needs the service token. The screens get it from the
+# reverse proxy (nginx in Docker, Vite in development), which plays the bank's terminal network.
+api = APIRouter(dependencies=[Depends(need_token)])
 
 
 def customer_state(cid: str, at: datetime) -> tuple[Customer, Events, list[Executed], dict]:
@@ -204,7 +226,32 @@ def apply_executed(cid: str, ts: datetime, typ: str, amount: int, asked: bool) -
         DB.commit()
 
 
+def balance_of(cid: str) -> int:
+    with LOCK:
+        r = DB.execute("SELECT balance FROM customers WHERE customer_id=?", (cid,)).fetchone()
+    if not r:
+        raise HTTPException(404, "customer not found")
+    return r["balance"]
+
+
+def expire_pauses() -> None:
+    """A pause ends after PAUSE_MINUTES. The operation is then cancelled (nothing moves) and
+    the customer may start a new one, which is scored again. A hold never expires."""
+    t = now()
+    with LOCK:
+        rows = DB.execute("SELECT * FROM decisions WHERE status='held' AND decision='pause' "
+                          "AND pause_until IS NOT NULL").fetchall()
+        due = [dict(r) for r in rows if parse(r["pause_until"]) <= t]
+        for d in due:
+            DB.execute("UPDATE decisions SET status='expired' WHERE decision_id=?", (d["decision_id"],))
+        DB.commit()
+    for d in due:
+        d["reasons"] = json.loads(d["reasons"])
+        log_event("pause_expired", d, comment="pause ended: operation cancelled, nothing moved")
+
+
 def get_decision(did: str) -> dict:
+    expire_pauses()
     with LOCK:
         r = DB.execute("SELECT * FROM decisions WHERE decision_id=?", (did,)).fetchone()
     if not r:
@@ -250,7 +297,15 @@ class ConsentIn(BaseModel):
 
 # --------------------------------------------------------------- core logic
 def make_decision(body: OpIn) -> dict:
-    ts = parse(body.timestamp) or now()
+    if body.timestamp and not ALLOW_CLIENT_TIMESTAMP:
+        raise HTTPException(422, "timestamp is set by the host; omit it")
+    ts = parse(body.timestamp) if body.timestamp else now()
+    if body.amount_kzt > balance_of(body.customer_id):
+        d = {"decision_id": None, "operation_id": body.operation_id, "customer_id": body.customer_id,
+             "channel": body.channel, "decision": "insufficient_funds", "score": None, "reasons": [],
+             "amount_kzt": body.amount_kzt, "result": "decline"}
+        log_event("insufficient_funds", d, actor="host", comment=f"amount {body.amount_kzt} above balance")
+        return d
     cust, ev, hist, _ = customer_state(body.customer_id, ts)
     op = Operation(body.operation_id, ts, body.channel, body.type, body.amount_kzt, body.payee_id,
                    body.payee_type, body.payee_known, body.terminal_id,
@@ -292,46 +347,51 @@ def make_decision(body: OpIn) -> dict:
     return d
 
 
+def once(key: str, body: OpIn) -> dict:
+    """Process an operation at most once per key: same body -> stored answer, other body -> 409."""
+    h = hashlib.sha256(body.model_dump_json().encode()).hexdigest()
+    with LOCK:   # held for the whole call, so two parallel retries cannot both go through
+        row = DB.execute("SELECT * FROM idem WHERE key=?", (key,)).fetchone()
+        if row:
+            if row["body_hash"] != h:
+                raise HTTPException(409, "key reused with a different body")
+            return json.loads(row["response"])
+        d = make_decision(body)
+        DB.execute("INSERT INTO idem VALUES (?,?,?,?)", (key, h, json.dumps(d, ensure_ascii=False), iso(now())))
+        DB.commit()
+    return d
+
+
 # ---------------------------------------------------------------- endpoints
 @app.get("/healthz")
 def healthz():
     return {"status": "ok", "rules_version": RULES.get("version")}
 
 
-@app.get("/v1/customers")
+@api.get("/v1/customers")
 def customers():
     with LOCK:
         return [dict(r) for r in DB.execute("SELECT * FROM customers")]
 
 
-@app.post("/mock-host/authorize")
+@api.post("/mock-host/authorize")
 def authorize(body: OpIn):
-    """Bank authorization host: asks the engine, answers approve / ask / hold."""
-    return make_decision(body)
+    """Bank authorization host: asks the engine, answers approve / ask / hold / decline.
+    A repeated operation_id returns the first answer instead of moving money twice."""
+    return once(f"op:{body.operation_id}", body)
 
 
-@app.post("/v1/decisions", dependencies=[Depends(need_token)])
+@api.post("/v1/decisions")
 def decisions(body: OpIn, idempotency_key: str = Header(alias="Idempotency-Key")):
-    h = hashlib.sha256(body.model_dump_json().encode()).hexdigest()
-    with LOCK:
-        row = DB.execute("SELECT * FROM idem WHERE key=?", (idempotency_key,)).fetchone()
-        if row:
-            if row["body_hash"] != h:
-                raise HTTPException(409, "Idempotency-Key reused with a different body")
-            return json.loads(row["response"])
-    d = make_decision(body)
-    with LOCK:
-        DB.execute("INSERT INTO idem VALUES (?,?,?,?)", (idempotency_key, h, json.dumps(d, ensure_ascii=False), iso(now())))
-        DB.commit()
-    return d
+    return once(f"key:{idempotency_key}", body)
 
 
-@app.get("/v1/decisions/{did}")
+@api.get("/v1/decisions/{did}")
 def decision_status(did: str):
     return get_decision(did)
 
 
-@app.post("/v1/decisions/{did}/answer")
+@api.post("/v1/decisions/{did}/answer")
 def answer(did: str, body: AnswerIn):
     d = get_decision(did)
     if d["status"] != "open":
@@ -346,6 +406,8 @@ def answer(did: str, body: AnswerIn):
         log_event("answer", d, actor="customer", comment="yes: they are asking me by phone")
         notify_trusted(d)
         return {"result": "hold", "decision": "pause", "pause_until": d["pause_until"]}
+    if d["amount"] > balance_of(d["customer_id"]):
+        raise HTTPException(409, "insufficient funds")
     with LOCK:
         DB.execute("UPDATE decisions SET status='approved' WHERE decision_id=?", (did,))
         DB.commit()
@@ -354,7 +416,7 @@ def answer(did: str, body: AnswerIn):
     return {"result": "approve"}
 
 
-@app.post("/v1/decisions/{did}/override")
+@api.post("/v1/decisions/{did}/override")
 def override(did: str, body: OverrideIn, x_officer_id: str = Header(default="")):
     if not x_officer_id:
         raise HTTPException(401, "X-Officer-Id required")
@@ -363,6 +425,8 @@ def override(did: str, body: OverrideIn, x_officer_id: str = Header(default=""))
         raise HTTPException(409, "decision is not on hold")
     ts = parse(d["ts"])
     if body.action == "release":
+        if d["amount"] > balance_of(d["customer_id"]):
+            raise HTTPException(409, "insufficient funds: the balance changed while on hold")
         with LOCK:
             DB.execute("UPDATE decisions SET status='approved' WHERE decision_id=?", (did,))
             DB.commit()
@@ -376,7 +440,7 @@ def override(did: str, body: OverrideIn, x_officer_id: str = Header(default=""))
     return {"result": "decline"}
 
 
-@app.post("/v1/reports")
+@api.post("/v1/reports")
 def report(body: ReportIn):
     with LOCK:
         if not DB.execute("SELECT 1 FROM customers WHERE customer_id=?", (body.customer_id,)).fetchone():
@@ -388,7 +452,7 @@ def report(body: ReportIn):
     return {"status": "protected_24h"}
 
 
-@app.post("/v1/consents")
+@api.post("/v1/consents")
 def consent_create(body: ConsentIn):
     with LOCK:
         if not DB.execute("SELECT 1 FROM customers WHERE customer_id=?", (body.customer_id,)).fetchone():
@@ -401,7 +465,7 @@ def consent_create(body: ConsentIn):
     return {"consent_id": cid}
 
 
-@app.delete("/v1/consents/{consent_id}")
+@api.delete("/v1/consents/{consent_id}")
 def consent_revoke(consent_id: str):
     eff = now() + timedelta(hours=24)   # a scammer cannot make the victim revoke mid-call
     with LOCK:
@@ -415,7 +479,7 @@ def consent_revoke(consent_id: str):
     return {"revoke_effective_at": iso(eff)}
 
 
-@app.get("/v1/events")
+@api.get("/v1/events")
 def events(limit: int = 100):
     with LOCK:
         rows = [dict(r) for r in DB.execute("SELECT * FROM events ORDER BY event_id DESC LIMIT ?", (limit,))]
@@ -425,8 +489,9 @@ def events(limit: int = 100):
     return rows
 
 
-@app.get("/v1/held")
+@api.get("/v1/held")
 def held():
+    expire_pauses()
     with LOCK:
         rows = [r["decision_id"] for r in DB.execute("SELECT decision_id FROM decisions WHERE status='held'")]
     return [get_decision(x) for x in rows]
@@ -435,6 +500,9 @@ def held():
 @app.websocket("/v1/events/stream")
 async def stream(ws: WebSocket):
     global LOOP
+    if not hmac.compare_digest(ws.headers.get("x-service-token", ""), SERVICE_TOKEN):
+        await ws.close(code=1008)   # policy violation: no token
+        return
     await ws.accept()
     LOOP = asyncio.get_running_loop()   # also works when startup events did not run
     WS_CLIENTS.add(ws)
@@ -445,14 +513,14 @@ async def stream(ws: WebSocket):
         WS_CLIENTS.discard(ws)
 
 
-@app.post("/v1/demo-reset")
+@api.post("/v1/demo-reset", dependencies=[Depends(need_demo)])
 def demo_reset():
     seed()
     FORCE_ENGINE_DOWN["on"] = os.getenv("ENGINE_FORCE_DOWN") == "1"
     return {"status": "reset"}
 
 
-@app.post("/v1/demo-time-skip")
+@api.post("/v1/demo-time-skip", dependencies=[Depends(need_demo)])
 def demo_time_skip(hours: int = 24):
     """DEMO ONLY: simulate time passing by moving every stored event `hours` into the past
     (loans, closed deposits, reports, executed operations, pending consent revocations).
@@ -466,6 +534,10 @@ def demo_time_skip(hours: int = 24):
                 DB.execute(f"UPDATE customers SET {col}=? WHERE customer_id=?", (iso(parse(r["v"]) - delta), r["customer_id"]))
         for r in DB.execute("SELECT id, ts FROM history").fetchall():
             DB.execute("UPDATE history SET ts=? WHERE id=?", (iso(parse(r["ts"]) - delta), r["id"]))
+        for r in DB.execute("SELECT decision_id, ts, pause_until FROM decisions").fetchall():
+            DB.execute("UPDATE decisions SET ts=?, pause_until=? WHERE decision_id=?",
+                       (iso(parse(r["ts"]) - delta),
+                        iso(parse(r["pause_until"]) - delta) if r["pause_until"] else None, r["decision_id"]))
         for r in DB.execute("SELECT consent_id, revoke_effective_at AS v FROM consents WHERE revoke_effective_at IS NOT NULL").fetchall():
             DB.execute("UPDATE consents SET revoke_effective_at=? WHERE consent_id=?", (iso(parse(r["v"]) - delta), r["consent_id"]))
         DB.commit()
@@ -473,7 +545,10 @@ def demo_time_skip(hours: int = 24):
     return {"skipped_hours": hours}
 
 
-@app.post("/v1/demo-engine-down")
+@api.post("/v1/demo-engine-down", dependencies=[Depends(need_demo)])
 def demo_engine_down(down: bool = True):
     FORCE_ENGINE_DOWN["on"] = down
     return {"engine_down": down}
+
+
+app.include_router(api)
