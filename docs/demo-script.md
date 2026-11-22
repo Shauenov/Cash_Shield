@@ -20,7 +20,7 @@ All scores below come from the frozen rules and were checked by `python eval/dem
 |---|---|---|---|---|
 | 0:00–0:15 | ATM, Gulnar apa | Nothing yet | "Gulnar apa is a made-up customer. A caller from the National Bank told her to take a loan and withdraw cash. She is at the ATM now." | Balance 3 000 000 ₸ |
 | 0:15–0:40 | ATM | Click **Withdraw 500 000 ₸**, then **No, this is my own decision** | "The scammer taught her to answer no. The cash comes out." | Question screen, then "Done. Please take your cash". Console: score 45, reasons S1 and S3 |
-| 0:40–1:10 | ATM | Click **New operation**, choose **ATM 042**, camera stays **Off**, click **Withdraw** | "Different ATM, headset, camera off, below the limit. The system still stops her." | Pause screen. Console: score 95 and four reasons, including "tries again after the question" |
+| 0:40–1:10 | ATM | Click **New operation**, choose **ATM 042**, camera stays **Off**, click **Withdraw** | "Different ATM, below the limit. She already said no. The system still stops her." | Pause screen. Console: score 95 and four reasons, including "tries again after the question" |
 | 1:10–1:30 | Console | Point at the `notify_sent` row (or the phone) | "She agreed in advance that her daughter is told. The message has no amount." | `notify_sent`, "simulated: Daughter Aliya" or a real Telegram message |
 | 1:30–1:55 | Cash desk tab | Customer **Bolat**, **2500000**, click **Pay out** | "Large sums go through the cash desk. The same engine gives the cashier the reasons." | Score 65, three reasons, "Do not pay out", **Pass to officer** |
 | 1:55–2:20 | App tab | Customer **Aigerim**, **2000000**, new **Private person**, click **Transfer** | "A closed deposit plus a transfer to a new person: the 'safe account' scheme." | Pause screen with "Call the bank from the app". Console score 75 |
@@ -45,7 +45,6 @@ Keep rows 0:15–0:40, 0:40–1:10 and 2:20–2:40 (ATM question, ATM stop, offi
 
 ## Optional extras (only if time allows)
 
-- Camera signal: ATM camera field **Phone at ear 8 s** adds +10 points. It is simulated, not a real detector.
 - "Scammer on the line" button in the app tab, then a small withdrawal: the question appears (score 40).
 - Trusted-person consent in the app tab, then withdraw consent: it only takes effect after 24 hours.
 
