@@ -10,7 +10,7 @@
 
 - Someone comfortable with banking apps who enjoys finding loopholes (a developer, a security-minded friend, a student from a fintech course).
 - They must not have read the README, `docs/`, `reports/` or the slides. If they have, say so in the notes: the test is then not blind.
-- Give them only `docs/blind-red-team-attacker-brief.md` (print it or send that one file).
+- Give them only `docs/blind-red-team-attacker-brief.md`, or its Russian version `docs/blind-red-team-attacker-brief.ru.md` (print it or send that one file).
 
 ## 2. Set up
 
