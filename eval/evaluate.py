@@ -5,6 +5,10 @@ Replay rules:
             (lies_on_question) answers "no" and the operation goes through.
             A normal customer always answers "no" and the operation goes through.
   * pause/hold -> the operation is stopped; the rest of the scenario never happens.
+  * amount above the balance -> the bank refuses, nothing moves; not an engine stop.
+
+Since 2026-11-21 every step goes through the decision lifecycle the API runs
+(services/api/lifecycle.py), so the metrics describe the code the demo runs.
 """
 from __future__ import annotations
 
@@ -18,8 +22,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from engine import Customer, Events, Operation, decide, load_rules  # noqa: E402
-from engine.signals import Executed  # noqa: E402
+from engine import load_rules  # noqa: E402
+from services.api.clock import ManualClock  # noqa: E402
+from services.api.ledger import InMemoryLedger  # noqa: E402
+from services.api.lifecycle import Lifecycle, OpRequest  # noqa: E402
 
 DATA = ROOT / "data"
 REPORTS = ROOT / "reports"
@@ -40,11 +46,14 @@ def load(split: str) -> list[dict]:
 
 
 def replay(sc: dict, rules: dict) -> dict:
-    cust = Customer(sc["customer"]["customer_id"], sc["customer"]["balance_24h_start"],
-                    sc["customer"]["median_withdrawal"])
-    ev = Events(_dt(sc["events"]["loan_issued_at"]), _dt(sc["events"]["deposit_closed_early_at"]),
-                _dt(sc["events"]["report_at"]))
-    hist: list[Executed] = []
+    """Replay one scenario through the decision lifecycle on an in-memory ledger and a manual clock."""
+    c, e = sc["customer"], sc["events"]
+    ledger = InMemoryLedger()
+    ledger.add_customer(c["customer_id"], balance=c["balance_24h_start"], median_withdrawal=c["median_withdrawal"],
+                        loan_issued_at=_dt(e["loan_issued_at"]), deposit_closed_at=_dt(e["deposit_closed_early_at"]),
+                        report_at=_dt(e["report_at"]))
+    clock = ManualClock(_dt(sc["operations"][0]["ts"]))
+    lc = Lifecycle(ledger, clock, rules=rules, timeout=None)   # offline: no timeout, never fail-open
     lies = sc["lies_on_question"]
     out = {"id": sc["id"], "type": sc["type"], "label": sc["label"], "age_group": sc["age_group"],
            "evasion": sc["evasion"], "hard": sc["hard"], "worst": "allow",
@@ -52,35 +61,34 @@ def replay(sc: dict, rules: dict) -> dict:
            "saved": 0, "total": sum(o["amount"] for o in sc["operations"]), "details": []}
     sev = {"allow": 0, "ask": 1, "pause": 2, "hold": 3}
     stopped = False
-    saved = 0
     for o in sc["operations"]:
         if stopped:
-            saved += o["amount"]
+            out["saved"] += o["amount"]
             continue
-        op = Operation(o["op_id"], _dt(o["ts"]), o["channel"], o["type"], o["amount"],
-                       o["payee_id"], o["payee_type"], o["payee_known"], o["terminal_id"],
-                       o["phone_at_ear_sec"])
-        d = decide(op, cust, ev, hist, rules)
-        out["details"].append((o["op_id"], d.decision, d.score, [r["signal"] for r in d.reasons]))
-        if sev[d.decision] > sev[out["worst"]]:
-            out["worst"] = d.decision
-        if d.decision in ("pause", "hold"):
-            stopped = True
-            out["stopped_noq"] = True
-            out["stopped_q"] = True
-            saved += o["amount"]
-        elif d.decision == "ask":
+        clock.set(_dt(o["ts"]))
+        r = lc.submit(OpRequest(o["op_id"], c["customer_id"], o["channel"], o["type"], o["amount"],
+                                o["payee_id"], o["payee_type"], o["payee_known"], o["terminal_id"],
+                                o["phone_at_ear_sec"]))
+        if not r.engine_available:
+            raise RuntimeError(f"{sc['id']} {o['op_id']}: engine unavailable in an offline run")
+        out["details"].append((o["op_id"], r.decision, r.score, [x["signal"] for x in r.reasons]))
+        if r.decision == "insufficient_funds":
+            # the bank refuses for lack of money: nothing moves, and it is not an engine stop
+            out["no_funds"] = out.get("no_funds", 0) + 1
+            continue
+        if sev[r.decision] > sev[out["worst"]]:
+            out["worst"] = r.decision
+        if r.result == "hold":
+            stopped = out["stopped_noq"] = out["stopped_q"] = True
+            out["saved"] += o["amount"]
+        elif r.result == "ask":
             out["intervened"] = True
-            if sc["label"] == "fraud" and not lies:
-                stopped = True           # honest answer "yes, they ask me" -> pause
-                out["stopped_q"] = True
-                saved += o["amount"]
-            else:
-                hist.append(Executed(op.ts, op.type, op.amount, asked=True))
-        else:
-            hist.append(Executed(op.ts, op.type, op.amount))
+            honest_victim = sc["label"] == "fraud" and not lies
+            lc.answer(r.decision_id, yes=honest_victim)     # honest "yes" -> pause; otherwise "no"
+            if honest_victim:
+                stopped = out["stopped_q"] = True
+                out["saved"] += o["amount"]
     out["intervened"] = out["intervened"] or out["stopped_noq"]
-    out["saved"] = saved
     return out
 
 

@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from services.api import main  # noqa: E402
+from services.api.clock import ManualClock, ShiftedClock  # noqa: E402
 
 main.DEMO_MODE = True              # demo endpoints are off unless DEMO_MODE=1
 TOKEN = {"X-Service-Token": main.SERVICE_TOKEN}
@@ -16,10 +17,10 @@ _n = [0]
 
 @pytest.fixture(autouse=True)
 def reset():
+    main.CLOCK = ShiftedClock()        # a fresh clock before the reset seeds the customers
+    main.DEMO_MODE = True
     client.post("/v1/demo-reset")
     main.FORCE_ENGINE_DOWN["on"] = False
-    main.DEMO_MODE = True
-    main.ALLOW_CLIENT_TIMESTAMP = False
 
 
 def body(cid="c_gulnar", amount=500_000, channel="atm", typ="cash_withdrawal", **kw):
@@ -230,13 +231,11 @@ def test_demo_endpoints_are_off_without_demo_mode():
 
 
 def test_client_timestamp_is_rejected():
-    past = (main.now() - main.timedelta(hours=5)).isoformat()
-    r = client.post("/mock-host/authorize", json=body("c_gulnar", 2_500_000, channel="cash_desk", timestamp=past))
-    assert r.status_code == 422
-    # simulation scripts may switch it on explicitly
-    main.ALLOW_CLIENT_TIMESTAMP = True
-    r = client.post("/mock-host/authorize", json=body("c_marat", 10_000, timestamp=main.now().isoformat()))
-    assert r.status_code == 200
+    for ts in ((main.now() - main.timedelta(hours=5)).isoformat(), main.now().isoformat()):
+        r = client.post("/mock-host/authorize", json=body("c_gulnar", 2_500_000, channel="cash_desk", timestamp=ts))
+        assert r.status_code == 422
+    # there is no switch any more: simulations move the clock instead
+    assert not hasattr(main, "ALLOW_CLIENT_TIMESTAMP")
 
 
 def test_same_operation_id_is_processed_once():
@@ -261,3 +260,81 @@ def test_api_needs_the_service_token():
     with _pt.raises(_WD):
         with anon.websocket_connect("/v1/events/stream") as ws:
             ws.receive_json()
+
+
+# ---------------------------------------------------------------- the Clock seam (2026-11-21)
+def test_manual_clock_drives_the_pause():
+    start = main.now().replace(microsecond=0)
+    main.CLOCK = ManualClock(start)
+    client.post("/v1/demo-reset")
+    r = client.post("/mock-host/authorize", json=body("c_aigerim", 2_000_000, channel="app", typ="transfer",
+                                                     payee_type="individual")).json()
+    assert r["decision"] == "pause" and r["pause_seconds_left"] == main.PAUSE_MINUTES * 60
+    did = r["decision_id"]
+    main.CLOCK.advance(main.timedelta(minutes=main.PAUSE_MINUTES - 1))
+    d = client.get(f"/v1/decisions/{did}").json()
+    assert d["status"] == "held" and d["pause_seconds_left"] == 60
+    main.CLOCK.advance(main.timedelta(minutes=2))
+    d = client.get(f"/v1/decisions/{did}").json()
+    assert d["status"] == "expired" and d["pause_seconds_left"] == 0
+
+
+def test_answer_yes_returns_seconds_left():
+    main.CLOCK = ManualClock(main.now().replace(microsecond=0))
+    client.post("/v1/demo-reset")
+    first = client.post("/mock-host/authorize", json=body()).json()
+    r = client.post(f"/v1/decisions/{first['decision_id']}/answer", json={"answer": "yes"}).json()
+    assert r["pause_seconds_left"] == main.PAUSE_MINUTES * 60
+
+
+def test_time_skip_moves_the_clock_not_the_data():
+    before = {c["customer_id"]: c for c in client.get("/v1/customers").json()}
+    t0 = main.now()
+    client.post("/v1/demo-time-skip?hours=24")
+    after = {c["customer_id"]: c for c in client.get("/v1/customers").json()}
+    assert after["c_gulnar"]["loan_issued_at"] == before["c_gulnar"]["loan_issued_at"]   # stored data untouched
+    assert main.now() - t0 >= main.timedelta(hours=24)
+
+
+def test_demo_reset_clears_the_time_skip():
+    client.post("/v1/demo-time-skip?hours=48")
+    client.post("/v1/demo-reset")
+    assert abs(main.now() - main.datetime.now(main.TZ)) < main.timedelta(minutes=1)
+    r = client.post("/mock-host/authorize", json=body("c_gulnar", 100_000)).json()
+    assert "S1" in [x["signal"] for x in r["reasons"]]
+
+
+def test_event_times_follow_the_clock():
+    main.CLOCK = ManualClock(main.datetime(2030, 1, 1, 12, 0, tzinfo=main.TZ))
+    client.post("/v1/demo-reset")
+    client.post("/mock-host/authorize", json=body("c_marat", 10_000))
+    assert client.get("/v1/events").json()[0]["ts"].startswith("2030-01-01T12:00")
+
+
+def test_clock_adapters():
+    t = main.datetime(2030, 1, 1, tzinfo=main.TZ)
+    m = ManualClock(t)
+    m.advance(main.timedelta(hours=1))
+    assert m.now() == t + main.timedelta(hours=1)
+    m.reset()                       # manual time belongs to the caller: reset keeps it
+    assert m.now() == t + main.timedelta(hours=1)
+    s_ = ShiftedClock()
+    s_.advance(main.timedelta(hours=5))
+    assert s_.now() - main.datetime.now(main.TZ) > main.timedelta(hours=4, minutes=59)
+    s_.reset()
+    assert abs(s_.now() - main.datetime.now(main.TZ)) < main.timedelta(seconds=5)
+
+
+def test_telegram_failure_is_logged_not_reported_as_sent(monkeypatch):
+    import httpx
+
+    def broken(*a, **kw):
+        raise httpx.ConnectError("no network")
+
+    monkeypatch.setattr(main, "TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setattr(httpx, "post", broken)
+    with main.LOCK:
+        main.DB.execute("UPDATE consents SET contact_chat='123' WHERE consent_id='k_seed'")
+        main.DB.commit()
+    client.post("/mock-host/authorize", json=body("c_gulnar", 2_500_000, channel="cash_desk"))
+    assert "notify_failed" in kinds() and "notify_sent" not in kinds()

@@ -11,7 +11,7 @@ Run: python eval/redteam.py   -> writes reports/redteam.md
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -19,25 +19,26 @@ sys.path.insert(0, str(ROOT))
 
 from fastapi.testclient import TestClient  # noqa: E402
 from services.api import main  # noqa: E402
+from services.api.clock import TZ, ManualClock  # noqa: E402
 
-TZ = timezone(timedelta(hours=5))
 GOAL = 2_000_000
 main.DEMO_MODE = True               # uses demo-reset
-main.ALLOW_CLIENT_TIMESTAMP = True    # offline simulation: replays operations over several days
 client = TestClient(main.app, headers={"X-Service-Token": main.SERVICE_TOKEN})
 n = [0]
 
 
 def attempt(customer, steps, title, idea):
-    """steps: list of (minutes_from_now, channel, type, amount, extra_fields)."""
+    """steps: list of (minutes_from_start, channel, type, amount, extra_fields).
+    Several days are replayed by moving a manual clock; the host stamps every operation itself."""
+    base = datetime.now(TZ).replace(microsecond=0)
+    main.CLOCK = ManualClock(base)
     client.post("/v1/demo-reset")
-    base = datetime.now(TZ)
     out, moved, stopped_at, trace = 0, 0, None, []
     for minutes, channel, typ, amount, extra in steps:
         n[0] += 1
+        main.CLOCK.set(base + timedelta(minutes=minutes))
         body = dict(operation_id=f"rt{n[0]}", customer_id=customer, channel=channel, type=typ,
-                    amount_kzt=amount, timestamp=(base + timedelta(minutes=minutes)).isoformat(),
-                    terminal_id=f"atm_{n[0] % 50:03d}")
+                    amount_kzt=amount, terminal_id=f"atm_{n[0] % 50:03d}")
         body.update(extra)
         r = client.post("/mock-host/authorize", json=body).json()
         d = r["decision"]

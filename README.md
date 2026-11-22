@@ -166,17 +166,17 @@ Not in this build: the camera signal as a real detector, Qaqpan (a button plus a
 
 ```
 engine/       risk engine (signals.py, scoring.py, rules.yaml frozen, rules.start.yaml pinned for unit tests)
-services/api  FastAPI: mock authorization host, decisions, consents, event log
+services/api  FastAPI routes (main.py) over the decision lifecycle (lifecycle.py), ledger adapters (ledger.py: SQLite, in-memory) and the clock (clock.py)
 web/          React screens: ATM, cash desk, app, officer console
 data/         generator and the two scenario sets (holdout hash in HOLDOUT.sha256)
-eval/         evaluate.py, tune.py, bench.py
+eval/         evaluate.py (replays scenarios through the same lifecycle), tune.py, bench.py, test_metrics_parity.py
 reports/      scorecard.md, tuning.md, FREEZE.md, negative_results.md, holdout_runs.log
 docs/         api.md, architecture image
 ```
 
 ## 10. Changes after the freeze
 
-Packaging and evidence only (`.gitattributes` forcing LF line endings, found by the clean-clone check in `reports/clean_machine_check.md`; Docker files, README, `bench.py`, `test-integration` task, `redteam.py` and its log, `demo_check.py`, demo script and backup video, the blind red team protocol and a demo-only "skip time" endpoint (`POST /v1/demo-time-skip`) with a button in the officer console; it moves stored events into the past and does not touch the engine). No change to weights, thresholds, scenarios or engine code. Any bug fix after the single holdout measurement must be listed here with its reason.
+Packaging and evidence only (`.gitattributes` forcing LF line endings, found by the clean-clone check in `reports/clean_machine_check.md`; Docker files, README, `bench.py`, `test-integration` task, `redteam.py` and its log, `demo_check.py`, demo script and backup video, the blind red team protocol and a demo-only "skip time" endpoint (`POST /v1/demo-time-skip`) with a button in the officer console; since 2026-11-21 it moves the API clock forward and does not touch stored data or the engine). No change to weights, thresholds, scenarios or engine code. Any bug fix after the single holdout measurement must be listed here with its reason.
 
 ### Bug fixes after the audit (2026-11-19)
 
@@ -187,8 +187,35 @@ All in the API and the screens (`services/api/main.py`, `web/`). The engine, wei
 | 1 | No balance check: 50 000 000 withdrawn from an 800 000 account was approved and the balance went negative | The host declines with `decision: insufficient_funds`, nothing moves, event `insufficient_funds`. Release and answer "no" recheck the balance (409) |
 | 2 | Anyone could call `demo-engine-down` and switch every decision to fail-open approve | Demo endpoints exist only with `DEMO_MODE=1` (otherwise 404) and need the service token |
 | 3 | The 30-minute pause never ended: `pause_until` was stored but not used | A pause past `pause_until` becomes `expired`: the operation is cancelled, nothing moves, event `pause_expired`, the screen says so. A new attempt is scored again. A hold still waits for an officer. Time skip now moves decision times too |
-| 4 | The caller could set the operation time and backdate past the 24 h windows (Gulnar 2.5M: pause 65 became allow 35) | The host stamps the time; a `timestamp` is rejected (422). Only offline simulations (`eval/redteam.py`) switch on `ALLOW_CLIENT_TIMESTAMP` |
+| 4 | The caller could set the operation time and backdate past the 24 h windows (Gulnar 2.5M: pause 65 became allow 35) | The host stamps the time; a `timestamp` is always rejected (422). Since 2026-11-21 the red team replays days with a manual clock instead (see below) |
 | 5 | The same `operation_id` sent twice was executed twice | `/mock-host/authorize` is idempotent by `operation_id` (same body: same answer; other body: 409), under one lock so parallel retries cannot both pass |
 | 6 | The service token protected only `/v1/decisions`; the screens used open endpoints | Every endpoint except `/healthz` (and the WebSocket) needs `X-Service-Token`. The browser never sees it: nginx (Docker) and Vite (development) add it, playing the bank's terminal network. Without Docker the API reads `.env` itself |
 
-Rerun after the fixes: engine tests 46/46, API tests 26/26, `demo-check` 10/10, red team still 4 of 10 (attempt 9 relabelled, see Known limits), bench p95 about 7 ms in-process, Docker stack checked (token added by nginx, WebSocket through the proxy).
+Rerun after these fixes (2026-11-19): engine tests 46/46, API tests 26/26, `demo-check` 10/10, red team still 4 of 10 (attempt 9 relabelled, see Known limits), bench p95 about 7 ms in-process, Docker stack checked (token added by nginx, WebSocket through the proxy).
+
+### One clock for the API (2026-11-21)
+
+Refactoring from the architecture review; the engine, weights, thresholds and scenario sets are unchanged.
+
+- `services/api/clock.py`: every business time in the API (24 h windows, pause end, consent revocation, event log) comes from one clock. `ShiftedClock` (real time plus an offset) runs the app; `ManualClock` (moves only when told) runs tests and the red team.
+- "Skip time" moves the clock forward instead of rewriting five tables of stored dates; "Reset demo" sets it back to real time. A new date column can no longer be forgotten by the time skip (the `decisions` table was, until 2026-11-19).
+- `ALLOW_CLIENT_TIMESTAMP` is gone: a `timestamp` sent by any caller gets 422. `eval/redteam.py` replays several days by moving a manual clock; its results are identical (4 of 10).
+- Responses and decision status carry `pause_seconds_left` by the server clock. The screens count down from it, so the timer stays right after a time skip.
+- Engine latency is measured with `time.perf_counter`, not with the clock.
+- Also fixed: a Telegram error (or a non-2xx answer) is now logged as `notify_failed` instead of `notify_sent`; FastAPI `on_event` replaced by `lifespan`; `reports/scorecard_tune.md` regenerated, it was left from before the freeze (now false pauses 0.0%, camera drop 3.3 pp, recall still 74.4%).
+
+Rerun: engine tests 46/46, API tests 33/33, `demo-check` 10/10, red team 4 of 10 (same traces), bench p95 under 20 ms in-process, screens checked by hand (pause timer, time skip, expiry). The Docker stack was not rebuilt after this change.
+
+
+### One decision lifecycle for the demo and the metrics (2026-11-21)
+
+Refactoring from the architecture review, built test-first. The engine, weights, thresholds and scenario sets are unchanged.
+
+- `services/api/lifecycle.py` owns every step of an operation: `submit`, `answer`, `release`, `confirm_fraud`, and the pause ending. It checks the balance, moves money, reports each transition to the event log and passes every pause or hold to the trusted-person notification. It fails open if the engine is down or slower than 500 ms.
+- It reads customers, money and decisions through a ledger with two adapters: SQLite for the API, in memory for tests and evaluation (`services/api/ledger.py`). The HTTP routes in `main.py` only translate to and from it.
+- `eval/evaluate.py` now replays scenarios through the same lifecycle. Before, it had its own copy of the ask / answer / stop rules, so the bug fixes of 2026-11-19 (balance check, pause end) existed only in the demo.
+- Tests: `services/api/test_lifecycle.py` (14, the lifecycle through its own interface, in memory on a manual clock), the 33 HTTP tests unchanged, and `eval/test_metrics_parity.py` (3), which checks the frozen holdout numbers from `reports/scorecard.md` and the tune numbers from `reports/FREEZE.md` through the lifecycle. `python tasks.py test-integration` runs all of them.
+- **Holdout: identical.** All 180 scenarios, with and without the camera, give the same result field by field as the old replay; the rendered holdout scorecard is byte-identical to `reports/scorecard.md` (checked without adding a line to `holdout_runs.log`).
+- **Tune set, without the camera: one scenario changed.** In `tune_savings_no_loan_006` the customer withdraws 423 000 + 262 000 + 454 000 of 1 517 000, then asks for 421 000 with 378 000 left. The old replay had no balance check and counted that impossible withdrawal as an engine stop. Now the bank refuses it for lack of money and it is not a stop. Tune recall without the camera goes from 71.1% to 70.0%, so tune metric 7 (recall drop without camera) goes from 3.3 pp to 4.4 pp: still within the 5 pp minimum, still above the 3 pp target. `reports/scorecard_tune.md` is regenerated. The generator can produce withdrawals above the balance; the scenario files are not changed, because that would change the frozen holdout hash.
+
+Rerun: engine tests 46/46; API, lifecycle and parity tests 50/50; `demo-check` 10/10; red team unchanged (4 of 10); bench p95 within target. Screens and the Docker stack were not re-checked by hand after this change (the HTTP interface is unchanged and covered by the 33 HTTP tests).

@@ -5,7 +5,7 @@
   eval [--set tune] metrics; default set is holdout (hash-checked, logged)
   tune              grid search on the TUNE set only
   bench             1000 authorize calls, p95 latency
-  test-integration  API endpoint tests
+  test-integration  API, decision lifecycle and metrics-parity tests
   demo-check [N]    automated API-level rehearsal of the demo (default 10 runs)
   redteam           scripted red team, writes reports/redteam.md
   usability         score the pause-screen usability test from reports/usability_data.csv
@@ -47,7 +47,7 @@ def main():
     elif task == "bench":
         run("eval/bench.py")
     elif task == "test-integration":
-        run("-m", "pytest", "services/api/test_api.py", "-q", "-W", "ignore", *rest)
+        run("-m", "pytest", "services/api", "eval/test_metrics_parity.py", "-q", "-W", "ignore", *rest)
     else:
         print(__doc__)
 
