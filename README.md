@@ -83,6 +83,7 @@ cd web && npm install && npm run dev      # http://localhost:5173
 | `python tasks.py eval` | **Metrics on the frozen holdout** (hash-checked); writes `reports/scorecard.md` |
 | `python tasks.py eval --set tune` | Same on the tuning set |
 | `python tasks.py tune` | Grid and coordinate search on the tuning set only |
+| `python tasks.py workload` | Officer workload estimate: pauses and holds per operation on both sets, 95% upper bound, reviews a day for placeholder volumes; writes `reports/workload.md` |
 | `python tasks.py bench` | 1000 authorize calls, latency |
 | `python tasks.py demo-check` | Automated API-level rehearsal of the demo (10 runs) |
 | `python tasks.py redteam` | Scripted red team, writes `reports/redteam.md` |

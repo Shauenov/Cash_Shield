@@ -3,6 +3,7 @@
   data              generate scenario sets (tune seed 42, holdout seed 2026)
   test              unit tests with coverage of the engine
   eval [--set tune] metrics; default set is holdout (hash-checked, logged)
+  workload          officer workload estimate (pauses and holds per operation)
   tune              grid search on the TUNE set only
   bench             1000 authorize calls, p95 latency
   test-integration  API, decision lifecycle and metrics-parity tests
@@ -44,6 +45,8 @@ def main():
         run("eval/usability.py", *rest)
     elif task == "redteam":
         run("eval/redteam.py")
+    elif task == "workload":
+        run("eval/workload.py")
     elif task == "bench":
         run("eval/bench.py")
     elif task == "test-integration":
