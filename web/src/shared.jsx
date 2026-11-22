@@ -5,7 +5,14 @@ export function useCustomers() {
   const [list, setList] = useState([])
   const [cid, setCid] = useState('c_gulnar')
   const reload = useCallback(() => api.customers().then(setList).catch(() => {}), [])
-  useEffect(() => { reload() }, [reload])
+  useEffect(() => {
+    // the API may still be starting when the screen opens: retry until the customers arrive
+    let stop = false, timer
+    const tryLoad = () => api.customers().then(l => { if (!stop) setList(l) })
+      .catch(() => { if (!stop) timer = setTimeout(tryLoad, 2000) })
+    tryLoad()
+    return () => { stop = true; clearTimeout(timer) }
+  }, [])
   return { list, cid, setCid, reload, current: list.find(c => c.customer_id === cid) }
 }
 
@@ -29,6 +36,18 @@ export function Lang({ lang, setLang }) {
   )
 }
 
+/** Centred page heading: the first word in the accent colour, a muted line under it. */
+export function PageTitle({ accent, rest, sub }) {
+  return (
+    <div className="page-title">
+      <h1><em>{accent}</em> {rest}</h1>
+      {sub && <p>{sub}</p>}
+    </div>
+  )
+}
+
+export const Balance = ({ value }) => <span className="balance"><span className="muted">Balance</span><b>{kzt(value)}</b></span>
+
 export const Pill = ({ d }) => <span className={`pill ${['allow', 'ask', 'pause', 'hold'].includes(d) ? d : 'other'}`}>{d}</span>
 
 export function Reasons({ reasons }) {
@@ -40,14 +59,17 @@ export function Reasons({ reasons }) {
   )
 }
 
-export function Countdown({ until }) {
+/** Counts down from the seconds the server reported. The browser clock is only used to tick:
+ *  the server's clock may be shifted by the demo "skip time" button. */
+export function Countdown({ seconds }) {
   const [left, setLeft] = useState(0)
   useEffect(() => {
-    if (!until) return
-    const f = () => setLeft(Math.max(0, Math.round((new Date(until) - Date.now()) / 1000)))
+    if (seconds == null) return
+    const end = Date.now() + seconds * 1000
+    const f = () => setLeft(Math.max(0, Math.round((end - Date.now()) / 1000)))
     f(); const t = setInterval(f, 1000); return () => clearInterval(t)
-  }, [until])
-  if (!until) return null
+  }, [seconds])
+  if (seconds == null) return null
   const m = String(Math.floor(left / 60)).padStart(2, '0'), s = String(left % 60).padStart(2, '0')
   return <div className="timer" aria-live="off">{m}:{s}</div>
 }
@@ -68,6 +90,8 @@ export function useFlow() {
     poll.current = setInterval(async () => {
       try {
         const d = await api.decision(id)
+        // resync the timer with the server (it moves when the demo skips time)
+        setDec(prev => (prev && prev.pause_seconds_left !== d.pause_seconds_left ? { ...prev, pause_seconds_left: d.pause_seconds_left } : prev))
         if (d.status === 'approved') { stopPoll(); setPhase('released') }
         if (d.status === 'declined') { stopPoll(); setPhase('declined') }
         if (d.status === 'expired') { stopPoll(); setPhase('expired') }
@@ -115,7 +139,7 @@ export function PauseBlock({ lang, dec, extra }) {
   return (
     <>
       <h1>⏸ {t.pause1}</h1>
-      <Countdown until={dec?.pause_until} />
+      <Countdown seconds={dec?.pause_seconds_left} />
       <p>{t.pause2}</p>
       <p>{t.pause3}</p>
       {extra}

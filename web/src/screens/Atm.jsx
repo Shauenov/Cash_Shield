@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { T, kzt } from '../api.js'
-import { CustomerSelect, Lang, PauseBlock, QuestionBlock, useCustomers, useFlow } from '../shared.jsx'
+import { Balance, CustomerSelect, Lang, PageTitle, PauseBlock, QuestionBlock, useCustomers, useFlow } from '../shared.jsx'
 
 export default function Atm() {
   const ctl = useCustomers()
@@ -17,17 +17,22 @@ export default function Atm() {
   })
   const finish = () => { flow.reset(); ctl.reload() }
   const cls = { form: '', question: 'ask', pause: 'pause', done: 'ok', released: 'ok', declined: 'pause', expired: 'pause', nofunds: 'pause' }[flow.phase]
+  const done = (text, extra) => (
+    <div className="result"><span className="big">{text}</span>{extra}<button onClick={finish}>New operation</button></div>
+  )
 
   return (
     <main>
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <h1>ATM</h1><Lang lang={lang} setLang={setLang} />
-      </div>
+      <PageTitle accent="ATM" rest="cash withdrawal"
+        sub="What the customer sees. The bank's authorization host asks Cash Shield before the cash comes out." />
       <div className={`screen atm ${cls}`}>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+          <Balance value={ctl.current?.balance} />
+          <Lang lang={lang} setLang={setLang} />
+        </div>
         {flow.phase === 'form' && (
           <>
             <h1>Cash withdrawal</h1>
-            <p className="muted" style={{ fontSize: 18 }}>Balance: {kzt(ctl.current?.balance)}</p>
             <div className="row">
               <CustomerSelect ctl={ctl} />
               <label>Amount, ₸ (ATM limit about 500 000)
@@ -44,19 +49,17 @@ export default function Atm() {
                 </select>
               </label>
             </div>
-            <p><button disabled={flow.busy} onClick={go}>Withdraw {kzt(Number(amount))}</button></p>
-            {flow.err && <p role="alert" style={{ color: 'var(--bad)' }}>{flow.err}</p>}
+            <p style={{ marginTop: 24 }}><button disabled={flow.busy} onClick={go}>Withdraw {kzt(Number(amount))}</button></p>
+            {flow.err && <p role="alert" className="alert">{flow.err}</p>}
           </>
         )}
         {flow.phase === 'question' && <QuestionBlock lang={lang} flow={flow} />}
-        {flow.phase === 'pause' && (
-          <PauseBlock lang={lang} dec={flow.dec} extra={<p className="muted" style={{ fontSize: 18 }}>{t.wait}</p>} />
-        )}
-        {flow.phase === 'done' && <><h1>✔ {t.done}</h1><p>{kzt(flow.dec?.amount_kzt || Number(amount))}</p><button onClick={finish}>New operation</button></>}
-        {flow.phase === 'released' && <><h1>✔ {t.released}</h1><button onClick={finish}>New operation</button></>}
-        {flow.phase === 'declined' && <><h1>{t.declined}</h1><button onClick={finish}>New operation</button></>}
-        {flow.phase === 'expired' && <><h1>{t.expired}</h1><button onClick={finish}>New operation</button></>}
-        {flow.phase === 'nofunds' && <><h1>{t.nofunds}</h1><button onClick={finish}>New operation</button></>}
+        {flow.phase === 'pause' && <PauseBlock lang={lang} dec={flow.dec} extra={<p className="muted">{t.wait}</p>} />}
+        {flow.phase === 'done' && done(`✔ ${t.done}`, <span className="balance"><b>{kzt(flow.dec?.amount_kzt || Number(amount))}</b></span>)}
+        {flow.phase === 'released' && done(`✔ ${t.released}`)}
+        {flow.phase === 'declined' && done(t.declined)}
+        {flow.phase === 'expired' && done(t.expired)}
+        {flow.phase === 'nofunds' && done(t.nofunds)}
       </div>
     </main>
   )

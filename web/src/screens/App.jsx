@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { api, T, kzt } from '../api.js'
-import { CustomerSelect, Lang, PauseBlock, QuestionBlock, useCustomers, useFlow } from '../shared.jsx'
+import { Balance, CustomerSelect, Lang, PageTitle, PauseBlock, QuestionBlock, useCustomers, useFlow } from '../shared.jsx'
 
 export default function App() {
   const ctl = useCustomers()
@@ -20,15 +20,16 @@ export default function App() {
 
   return (
     <main>
-      <h1>Mobile app</h1>
+      <PageTitle accent="Mobile" rest="app"
+        sub="Transfers get the same check. The customer can name a trusted person and press “Scammer on the line”." />
       <div className="phone">
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
           <CustomerSelect ctl={ctl} /><Lang lang={lang} setLang={setLang} />
         </div>
-        <p className="muted">Balance: {kzt(ctl.current?.balance)}</p>
-        <div className="row" role="tablist">
+        <p><Balance value={ctl.current?.balance} /></p>
+        <div className="tabs" role="tablist">
           {[['transfer', 'Transfer'], ['trusted', 'Trusted person'], ['alert', 'Scammer']].map(([k, l]) => (
-            <button key={k} className={`small ${tab === k ? '' : 'secondary'}`} style={{ width: 'auto', marginTop: 0 }} onClick={() => { setTab(k); setMsg('') }}>{l}</button>
+            <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); setMsg('') }}>{l}</button>
           ))}
         </div>
 
@@ -43,7 +44,7 @@ export default function App() {
                   </select>
                 </label>
                 <button disabled={flow.busy} onClick={go}>Transfer {kzt(Number(amount))}</button>
-                {flow.err && <p role="alert" style={{ color: 'var(--bad)' }}>{flow.err}</p>}
+                {flow.err && <p role="alert" className="alert">{flow.err}</p>}
               </>
             )}
             {flow.phase === 'question' && <QuestionBlock lang={lang} flow={flow} />}
