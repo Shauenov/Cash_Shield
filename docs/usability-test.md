@@ -33,6 +33,14 @@ If the result is below the minimum: rewrite the text, then repeat with 5 new peo
 
 > "Imagine you are at your bank. Someone phoned you, said they are from the bank and told you to take out money to keep it safe. You tried to send it from this app, and this is what you now see. Please tell me, or show me, what you would do now. Take your time but speak out loud."
 
+Russian (read it exactly):
+
+> «Представьте, что вы в своём банке. Вам позвонили, сказали, что звонят из банка, и велели перевести деньги, чтобы их сохранить. Вы попробовали отправить их из этого приложения и теперь видите вот это. Скажите или покажите, пожалуйста, что вы сейчас сделаете. Не торопитесь, но говорите вслух.»
+
+Kazakh: not prepared yet. Have a native speaker translate the English text before the test and write it here; do not translate on the spot, every person must hear the same words.
+
+Before handing the device over, scroll so that the pause screen fills the view. The page header and the tabs above it ("Scammer", "Trusted person") are English demo labels and can hint at the answer; if a participant reads them, note it.
+
 Start the stopwatch when you finish the last word and the person looks at the screen. Stop it when they say or do something that you can score (section 4).
 
 During the test:
