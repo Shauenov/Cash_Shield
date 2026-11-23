@@ -1,4 +1,4 @@
-"""Signals S1-S10. Pure functions: no I/O, no web dependencies.
+"""Signals S1-S14 (S12-S14: v2 only). Pure functions: no I/O, no web dependencies.
 
 Every signal returns None (did not fire) or a (code, text_ru) pair. The weight
 comes from rules.yaml, so the engine can be re-tuned without code changes.
@@ -22,6 +22,7 @@ class Operation:
     payee_known: bool = False
     terminal_id: Optional[str] = None
     phone_at_ear_sec: Optional[float] = None
+    payee_company_age_days: Optional[int] = None   # v2: days since the recipient company was registered
 
 
 @dataclass
@@ -29,6 +30,7 @@ class Customer:
     customer_id: str
     balance_24h_start: int   # balance at the start of the 24h window
     median_withdrawal: int   # median cash withdrawal over the last 180 days
+    balance_7d_start: Optional[int] = None   # v2: balance at the start of the 7-day window
 
 
 @dataclass
@@ -129,7 +131,48 @@ def s8_report(op, cust, ev, hist, p) -> Hit:
 
 def s9_legal_payee(op, cust, ev, hist, p) -> Hit:
     if op.type == "transfer" and op.payee_type == "legal":
+        min_age = p.get("legal_discount_min_age_days")   # v2 only; v1 discounts every company
+        if min_age is not None and (op.payee_company_age_days is None or op.payee_company_age_days < min_age):
+            return None
         return ("S9", "Получатель — юридическое лицо", "Recipient is a company")
+    return None
+
+
+# ---- v2 signals: run only when the rules give them a weight ----------------
+def s12_loan_money_out(op, cust, ev, hist, p) -> Hit:
+    """Money from a fresh loan or a closed deposit leaves by transfer, to anyone."""
+    if op.type != "transfer" or cust.balance_24h_start <= 0:
+        return None
+    if not (_within(ev.loan_issued_at, op.ts, p["window_hours"])
+            or _within(ev.deposit_closed_early_at, op.ts, p["window_hours"])):
+        return None
+    total = sum(h.amount for h in _window(hist, op.ts, p["window_hours"]) if h.type == "transfer") + op.amount
+    if total >= p["s12_share"] * cust.balance_24h_start:
+        share = total / cust.balance_24h_start
+        return ("S12", f"Деньги кредита или вклада уходят переводом: {share:.0%} остатка",
+                f"Loan or deposit money leaves by transfer: {share:.0%} of the balance")
+    return None
+
+
+def s13_week_drain(op, cust, ev, hist, p) -> Hit:
+    """Most of the balance leaves over several days, below every 24-hour check."""
+    if not cust.balance_7d_start:
+        return None
+    past = _window(hist, op.ts, p["week_hours"])
+    if not any(op.ts - h.ts >= timedelta(hours=p["window_hours"]) for h in past):
+        return None   # all within one day: S2 and S4 cover that
+    total = sum(h.amount for h in past) + op.amount
+    if total >= p["s13_share"] * cust.balance_7d_start and total >= p["s13_min_kzt"]:
+        share = total / cust.balance_7d_start
+        return ("S13", f"За 7 дней выведено {share:.0%} остатка", f"{share:.0%} of the balance moved out over 7 days")
+    return None
+
+
+def s14_young_company(op, cust, ev, hist, p) -> Hit:
+    age = op.payee_company_age_days
+    if op.type == "transfer" and op.payee_type == "legal" and age is not None and age < p["s14_max_age_days"]:
+        return ("S14", f"Компания-получатель зарегистрирована {age} дн. назад",
+                f"Recipient company registered {age} days ago")
     return None
 
 

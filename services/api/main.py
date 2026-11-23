@@ -256,6 +256,7 @@ class OpIn(BaseModel):
     payee_type: Optional[str] = None
     payee_known: bool = False
     terminal_id: Optional[str] = None
+    payee_company_age_days: Optional[int] = Field(default=None, ge=0)   # v2 rules: from the state register
     timestamp: Optional[str] = None   # never accepted: the host stamps the time (422 if sent)
     extra: dict = {}
 
@@ -285,7 +286,7 @@ def make_decision(body: OpIn) -> dict:
         raise HTTPException(422, "timestamp is set by the host; omit it")
     req = OpRequest(body.operation_id, body.customer_id, body.channel, body.type, body.amount_kzt,
                     body.payee_id, body.payee_type, body.payee_known, body.terminal_id,
-                    (body.extra or {}).get("phone_at_ear_sec"))
+                    (body.extra or {}).get("phone_at_ear_sec"), body.payee_company_age_days)
     t0 = time.perf_counter()   # real time: latency is not affected by the demo clock
     try:
         out = LIFECYCLE.submit(req)

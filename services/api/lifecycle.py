@@ -36,6 +36,7 @@ class OpRequest:
     payee_known: bool = False
     terminal_id: Optional[str] = None
     phone_at_ear_sec: Optional[float] = None
+    payee_company_age_days: Optional[int] = None
 
 
 @dataclass
@@ -104,10 +105,13 @@ class Lifecycle:
             return Outcome("decline", "insufficient_funds")
         hist = self.ledger.history(cid)
         window = [h for h in hist if timedelta(0) <= ts - h.ts < timedelta(hours=24)]
-        cust = Customer(cid, self.ledger.balance(cid) + sum(h.amount for h in window),
-                        self.ledger.median_withdrawal(cid))
+        week = [h for h in hist if timedelta(0) <= ts - h.ts < timedelta(days=7)]
+        balance = self.ledger.balance(cid)
+        cust = Customer(cid, balance + sum(h.amount for h in window), self.ledger.median_withdrawal(cid),
+                        balance_7d_start=balance + sum(h.amount for h in week))
         op = Operation(req.operation_id, ts, req.channel, req.type, req.amount, req.payee_id,
-                       req.payee_type, req.payee_known, req.terminal_id, req.phone_at_ear_sec)
+                       req.payee_type, req.payee_known, req.terminal_id, req.phone_at_ear_sec,
+                       req.payee_company_age_days)
         try:
             res = _POOL.submit(self.engine, op, cust, self.ledger.events(cid), hist).result(timeout=self.timeout)
             if res is None:

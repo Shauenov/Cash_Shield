@@ -1,4 +1,8 @@
-"""Scenario replay and metrics. `python tasks.py eval [--set tune|holdout] [--no-camera]`.
+"""Scenario replay and metrics.
+`python tasks.py eval [--set tune|holdout|tune2|holdout2] [--rules FILE] [--no-camera]`.
+
+holdout2 (the v2 sets) is measured once per rules version; a repeat is refused
+(see reports/holdout2_runs.log). Neither holdout is ever read by tuning.
 
 Replay rules:
   * ask  -> an honest victim answers "yes" (-> pause); a coached victim
@@ -29,6 +33,7 @@ from services.api.lifecycle import Lifecycle, OpRequest  # noqa: E402
 
 DATA = ROOT / "data"
 REPORTS = ROOT / "reports"
+LOCKS = {"holdout": "HOLDOUT.sha256", "holdout2": "HOLDOUT2.sha256"}   # hash-checked sets
 
 
 def _dt(s):
@@ -37,8 +42,8 @@ def _dt(s):
 
 def load(split: str) -> list[dict]:
     path = DATA / f"scenarios_{split}.jsonl"
-    if split == "holdout":
-        want = (DATA / "HOLDOUT.sha256").read_text().strip()
+    if split in LOCKS:
+        want = (DATA / LOCKS[split]).read_text().strip()
         got = hashlib.sha256(path.read_bytes()).hexdigest()
         if want != got:
             raise SystemExit(f"holdout hash mismatch: expected {want[:12]}, got {got[:12]}")
@@ -68,7 +73,7 @@ def replay(sc: dict, rules: dict) -> dict:
         clock.set(_dt(o["ts"]))
         r = lc.submit(OpRequest(o["op_id"], c["customer_id"], o["channel"], o["type"], o["amount"],
                                 o["payee_id"], o["payee_type"], o["payee_known"], o["terminal_id"],
-                                o["phone_at_ear_sec"]))
+                                o["phone_at_ear_sec"], o.get("payee_company_age_days")))
         if not r.engine_available:
             raise RuntimeError(f"{sc['id']} {o['op_id']}: engine unavailable in an offline run")
         out["details"].append((o["op_id"], r.decision, r.score, [x["signal"] for x in r.reasons]))
@@ -185,19 +190,33 @@ def main(argv: list[str]) -> None:
     if "--set" in argv:
         split = argv[argv.index("--set") + 1]
     no_cam = "--no-camera" in argv
-    rules = load_rules()
+    rules_path = Path(argv[argv.index("--rules") + 1]) if "--rules" in argv else None
+    rules = load_rules(rules_path)
+    if split == "holdout2":
+        # single measurement per rules version: refuse a second run of the same version
+        log = REPORTS / "holdout2_runs.log"
+        tag = f"rules={rules.get('version')} "
+        if log.exists() and tag in log.read_text(encoding="utf-8"):
+            raise SystemExit(f"holdout2 was already measured with {tag.strip()}; see {log.name}")
     results, m = run_set(split, rules, camera=not no_cam)
     _, m_nocam = run_set(split, rules, camera=False)
     text = render(split, m, m_nocam)
     REPORTS.mkdir(exist_ok=True)
-    if split == "holdout":
+    if split == "holdout2":
+        with open(REPORTS / "holdout2_runs.log", "a", encoding="utf-8") as f:
+            f.write(f"{datetime.now().isoformat(timespec='seconds')} rules={rules.get('version')} "
+                    f"recall={m['recall']:.3f} fpr={m['fpr_any']:.3f}\n")
+        name = "v2" if "S12" in rules["weights"] else "v1"
+        (REPORTS / f"scorecard_holdout2_{name}.md").write_text(text, encoding="utf-8")
+    elif split == "holdout":
         # transparency log: every holdout run is recorded, the measurement must be single
         with open(REPORTS / "holdout_runs.log", "a", encoding="utf-8") as f:
             f.write(f"{datetime.now().isoformat(timespec='seconds')} rules={rules.get('version')} "
                     f"recall={m['recall']:.3f} fpr={m['fpr_any']:.3f}\n")
         (REPORTS / "scorecard.md").write_text(text, encoding="utf-8")
     else:
-        (REPORTS / f"scorecard_{split}.md").write_text(text, encoding="utf-8")
+        suffix = "_v2" if "S12" in rules["weights"] else ""
+        (REPORTS / f"scorecard_{split}{suffix}.md").write_text(text, encoding="utf-8")
     sys.stdout.reconfigure(encoding="utf-8")
     print(text)
 

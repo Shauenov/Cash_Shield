@@ -1,0 +1,38 @@
+version: v2-tuned-candidate
+weights:
+  S1: 35
+  S2: 20
+  S3: 15
+  S4: 25
+  S5: 15
+  S6: 20
+  S7: 15
+  S8: 40
+  S9: -15
+  S10: 10
+  S11: 30
+  S12: 25
+  S13: 30
+  S14: 25
+params:
+  window_hours: 24
+  balance_share_min: 0.8
+  cash_large_min_kzt: 300000
+  cash_large_median_mult: 5
+  series_min_ops: 2
+  series_min_total_kzt: 1000000
+  new_payee_min_kzt: 200000
+  phone_at_ear_min_sec: 3
+  escalation_window_hours: 24
+  legal_discount_min_age_days: 365
+  s12_share: 0.6
+  s13_share: 0.6
+  s13_min_kzt: 1000000
+  week_hours: 168
+  s14_max_age_days: 180
+thresholds:
+  ask: 45
+  pause: 65
+  hold: 85
+pause_minutes: 30
+camera_enabled: true

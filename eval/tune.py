@@ -6,6 +6,9 @@ Objective: max recall (with question) subject to
         any-intervention FPR <= 5% and pause FPR <= 1%.
 If no candidate satisfies both constraints, pick the one with the smallest
 constraint violation and say so in the report.
+
+v2 (2026-11-23): `python tasks.py tune --v2` tunes engine/rules.v2.start.yaml on the
+TUNE2 set only and writes engine/rules.v2.tuned.yaml and reports/tuning_v2.md.
 """
 from __future__ import annotations
 
@@ -24,9 +27,11 @@ from engine.scoring import with_overrides  # noqa: E402
 from evaluate import metrics, replay, load  # noqa: E402
 
 
-def main():
-    base = load_rules()
-    scenarios = load("tune")          # holdout is never loaded here
+def main(argv=()):
+    v2 = "--v2" in argv
+    base = load_rules(ROOT / "engine" / "rules.v2.start.yaml") if v2 else load_rules()
+    split = "tune2" if v2 else "tune"
+    scenarios = load(split)           # no holdout is ever loaded here
     rows = []
     for ask, pause, d1, d4, d7 in itertools.product((35, 40, 45), (55, 60, 65, 70),
                                                     (-5, 0, 5), (-5, 0, 5), (-5, 0, 5)):
@@ -59,7 +64,8 @@ def main():
     improved = True
     while improved:
         improved = False
-        for kind, name in [("w", s) for s in ("S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S11")] + \
+        names = ("S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S11") + (("S12", "S13", "S14") if v2 else ())
+        for kind, name in [("w", s) for s in names] + \
                           [("t", "ask"), ("t", "pause")]:
             for delta in (-5, 5):
                 if kind == "w":
@@ -80,7 +86,8 @@ def main():
     best = (cur["thresholds"]["ask"], cur["thresholds"]["pause"], 0, 0, 0, cur_m["recall"],
             cur_m["recall_noq"], cur_m["fpr_any"], cur_m["fpr_pause"], 0, cur)
 
-    out = ["# Tuning report (TUNE set only, 180 normal + 90 fraud)", "",
+    n_f = sum(sc["label"] == "fraud" for sc in scenarios)
+    out = [f"# Tuning report ({split.upper()} set only, {len(scenarios) - n_f} normal + {n_f} fraud)", "",
            f"Candidates evaluated: {len(rows)}. Feasible (FPR<=5%, false pause<=1%): {len(feasible)}. {note}.", "",
            "## Top 10 candidates", "",
            "| ask | pause | dS1 | dS4 | dS7 | recall | recall no-question | FPR any | FPR pause |",
@@ -91,18 +98,20 @@ def main():
     out += ["", "## Stage 2: coordinate descent (tune set only)", ""] + [f"- {s}" for s in steps]
     out += ["", f"## Chosen: ask={best[0]}, pause={best[1]}, weights={best[10]['weights']}",
             f"recall {best[5]:.1%}, recall without question {best[6]:.1%}, FPR any {best[7]:.1%}, FPR pause {best[8]:.1%}",
-            "", "Overfitting warning: 270 scenarios written by the same team, 12 free parameters. "
+            "", f"Overfitting warning: {len(scenarios)} scenarios written by the same team, "
+            f"{len(names) + 2} free parameters. "
             "Only the single holdout measurement says whether this generalizes.", ""]
-    (ROOT / "reports" / "tuning.md").write_text("\n".join(out), encoding="utf-8")
+    (ROOT / "reports" / ("tuning_v2.md" if v2 else "tuning.md")).write_text("\n".join(out), encoding="utf-8")
 
     cfg = dict(best[10])
-    cfg["version"] = "tuned-candidate"
-    with open(ROOT / "engine" / "rules.tuned.yaml", "w", encoding="utf-8") as f:
+    cfg["version"] = "v2-tuned-candidate" if v2 else "tuned-candidate"
+    out_file = ROOT / "engine" / ("rules.v2.tuned.yaml" if v2 else "rules.tuned.yaml")
+    with open(out_file, "w", encoding="utf-8") as f:
         yaml.safe_dump(cfg, f, sort_keys=False, allow_unicode=True)
     sys.stdout.reconfigure(encoding="utf-8")
     print("\n".join(out))
-    print("Wrote engine/rules.tuned.yaml (copy to rules.yaml to adopt).")
+    print(f"Wrote {out_file.relative_to(ROOT)}.")
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])

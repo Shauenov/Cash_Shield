@@ -37,6 +37,11 @@ def _signal_list(rules: dict):
     ]
     if rules.get("camera_enabled", True):
         fns.append(sg.s10_phone_at_ear)
+    # v2 signals run only when the rules weight them, so v1 rules behave exactly as frozen
+    for code, fn in (("S12", sg.s12_loan_money_out), ("S13", sg.s13_week_drain),
+                     ("S14", sg.s14_young_company)):
+        if code in rules["weights"]:
+            fns.append(fn)
     return fns
 
 
