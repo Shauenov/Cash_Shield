@@ -224,3 +224,36 @@ Rerun: engine tests 46/46; API, lifecycle and parity tests 50/50; `demo-check` 1
 ### Docker and screens re-checked (2026-11-22)
 
 Docker stack rebuilt from commit `3139752` and the demo script walked through by hand at `http://localhost:8080`: ATM question (45) then hold on the second try (95, four reasons, simulated trusted-person notice), cash desk pause for Bolat (65), app pause for Aigerim (75), officer release with comment, and "skip time +24 h" expiring the app pause. No browser console errors. Tests before the rebuild: engine 46/46; API, lifecycle and parity 50/50; `demo-check` 10/10.
+
+## 11. Rules v2: an attempt to close the red-team bypasses (2026-11-23)
+
+**The demo and every number above still use the frozen v1 rules.** v2 is a separate, frozen rule file (`engine/rules.v2.yaml`); the API uses it only with `RULES_PATH=engine/rules.v2.yaml`.
+
+Method, one commit per step (details in `reports/FREEZE_v2.md`):
+
+1. New scenario types in `data/generate.py` for the bypasses (fresh loan sent to a known recipient or to companies; one withdrawal a day for several days) and honest look-alikes (a large transfer to family, a week of renovation payments). Operations carry `payee_company_age_days` (the bank can read a company's registration date from the state register). The v1 sets regenerate byte for byte.
+2. New sets `tune2` (339 scenarios) and `holdout2` (226), holdout2 hash locked (tag `holdout2-frozen`) **before** any v2 rule was written.
+3. New signals, active only in v2: S12 loan or closed-deposit money leaves by transfer (60% of the balance in 24 h), S13 drain over 7 days across more than one day, S14 recipient company registered < 180 days ago; the company discount S9 applies only to companies registered >= 365 days ago.
+4. Tuned on tune2 only (`reports/tuning_v2.md`), frozen (tag `v2-frozen`), then measured **once** for each version on holdout2 (`reports/holdout2_runs.log`; a repeat is refused).
+
+Holdout2 (86 fraud, 140 normal), measured once per version:
+
+| Metric | v1 | v2 | Minimum |
+|---|---:|---:|---:|
+| Recall | 67.4% (57-76%) | **76.7%** (67-84%) | 75% |
+| Recall without relying on the question | 57.0% | 59.3% | 60% |
+| False interventions, normal | 3.6% | 4.3% | <= 10% |
+| False pauses, normal | 1.4% | 2.1% | <= 3% |
+| Money saved | 60.8% | 69.0% | 55% |
+| Recall drop without camera | 4.7 pp | **7.0 pp (FAIL)** | <= 5 pp |
+| Fairness gap by age | 2.1 pp | 3.2 pp | <= 8 pp |
+
+By the bypass types on holdout2 (stopped with the question / by pause alone): loan sent to companies 4/2 -> **10/10** of 10; loan sent to a known recipient 0/0 -> 4/0 of 8 (only an honest answer stops it); a withdrawal a day 2/2 -> 2/1 of 8 (**no gain**). Older types lost a little by pause alone (ATM series after a loan 12 -> 10 of 14). The recall intervals overlap: on 86 fraud scenarios the gain is not proven.
+
+Scripted red team with v2 (`python eval/redteam.py --v2`, `reports/redteam_v2.md`; shells are 40 days old, attempt 11 uses an 11-year-old company): **4 of 11 attempts still reach the goal.**
+
+- Fixed: transfers to young companies (attempts 7, 8) are now held or paused at once.
+- Still open: a known recipient (6) and an old company (11) get only the question (score 60, pause at 65), so a coached "no" passes; one 400 000 a day for six days (10) passes.
+- **New:** "wait 25 hours, then withdraw" (5) was stopped by v1 and passes under v2, because tuning raised the pause threshold from 55 to 65.
+
+The same author wrote the v2 rules, the v2 scenario types and both v2 sets; holdout2 guards against tuning to single scenarios, not against a shared idea of how scammers behave. Whether the demo moves to v2 is a separate decision.

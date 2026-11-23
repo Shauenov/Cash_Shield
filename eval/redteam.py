@@ -6,16 +6,24 @@ question the answer is "no". Money that went through before a hold counts as los
 
 Honest caveat: the author of this script also wrote the rules, so this is NOT a blind
 test. A blind red team (someone who only sees the screens) is still to be done.
-Run: python eval/redteam.py   -> writes reports/redteam.md
+Run: python eval/redteam.py        -> writes reports/redteam.md (frozen v1 rules)
+     python eval/redteam.py --v2   -> writes reports/redteam_v2.md (engine/rules.v2.yaml).
+     Under v2 the shells in attempts 7 and 8 are 40 days old, and attempt 11 uses a company
+     registered 11 years ago (a bought or hijacked old firm).
 """
 from __future__ import annotations
 
+import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+V2 = "--v2" in sys.argv
+if V2:   # must be set before the API module reads its rules
+    os.environ["RULES_PATH"] = str(ROOT / "engine" / "rules.v2.yaml")
+SHELL = {"payee_company_age_days": 40} if V2 else {}
 
 from fastapi.testclient import TestClient  # noqa: E402
 from services.api import main  # noqa: E402
@@ -79,14 +87,14 @@ def run():
                                    dict(payee_id="p_1", payee_type="individual", payee_known=True))],
                      "6. Transfer to a recipient already known", "Make the recipient look familiar"))
     A.append(attempt("c_gulnar", [(0, "app", "transfer", 2_200_000,
-                                   dict(payee_id="p_2", payee_type="legal", payee_known=False))],
+                                   dict(payee_id="p_2", payee_type="legal", payee_known=False, **SHELL))],
                      "7. Transfer to a company (shell firm)", "Use the company discount (S9)"))
     A.append(attempt("c_gulnar", [(0, "app", "transfer", 700_000,
-                                   dict(payee_id="p_3", payee_type="legal", payee_known=False)),
+                                   dict(payee_id="p_3", payee_type="legal", payee_known=False, **SHELL)),
                                   (30, "app", "transfer", 700_000,
-                                   dict(payee_id="p_4", payee_type="legal", payee_known=False)),
+                                   dict(payee_id="p_4", payee_type="legal", payee_known=False, **SHELL)),
                                   (60, "app", "transfer", 700_000,
-                                   dict(payee_id="p_5", payee_type="legal", payee_known=False))],
+                                   dict(payee_id="p_5", payee_type="legal", payee_known=False, **SHELL))],
                      "8. Three transfers to three companies", "Split across recipients and shells"))
     A.append(attempt("c_dana", [(0, "cash_desk", "cash_withdrawal", 500_000, {}),
                                 (400, "cash_desk", "cash_withdrawal", 500_000, {})],
@@ -98,6 +106,11 @@ def run():
                                  (96 * 60 + 20, "atm", "cash_withdrawal", 400_000, {}),
                                  (120 * 60 + 25, "atm", "cash_withdrawal", 400_000, {})],
                      "10. One 400k per day for six days", "Stay under every 24-hour window"))
+    if V2:
+        A.append(attempt("c_gulnar", [(0, "app", "transfer", 2_200_000,
+                                       dict(payee_id="p_6", payee_type="legal", payee_known=False,
+                                            payee_company_age_days=4000))],
+                         "11. Transfer to an old company", "Use a firm registered 11 years ago"))
     return A
 
 
@@ -108,7 +121,8 @@ def money(x):
 def render(A):
     lines = ["# Red team log", "",
              "Goal: move >= 2 000 000 KZT out without a pause or hold. The attacker answers 'no' to every question.",
-             "Run with `python eval/redteam.py` against the frozen rules (`thresholds-frozen`).", "",
+             (f"Run with `python eval/redteam.py --v2` against `engine/rules.v2.yaml` (`v2-frozen`)." if V2 else
+              "Run with `python eval/redteam.py` against the frozen rules (`thresholds-frozen`)."), "",
              "**Honest caveat:** the same person wrote the rules and these attempts, so this is not a blind test. "
              "A second person who sees only the screens still has to try.", "",
              "| # | Attempt | Idea | Money moved before stop | Stopped | Goal reached |",
@@ -131,6 +145,6 @@ def render(A):
 if __name__ == "__main__":
     res = run()
     text = render(res)
-    (ROOT / "reports" / "redteam.md").write_text(text, encoding="utf-8")
+    (ROOT / "reports" / ("redteam_v2.md" if V2 else "redteam.md")).write_text(text, encoding="utf-8")
     sys.stdout.reconfigure(encoding="utf-8")
     print(text)
