@@ -5,6 +5,15 @@ Two sets, two seeds:
   holdout seed 2026, amounts x(0.7..1.3), intervals x(0.5..1.5) per scenario
                     (frozen by SHA-256, measured once)
 
+Version 2 sets (added 2026-11-23, after the red team found four bypasses):
+  tune2    seed 4242, nominal parameters
+  holdout2 seed 7171, shifted like the holdout (frozen by SHA-256 in HOLDOUT2.sha256
+           BEFORE any v2 rule was written, measured once for v1 and once for v2)
+  They hold every v1 type plus TYPES_V2: the red-team attacks and honest look-alikes.
+  Their operations carry `payee_company_age_days` (days since the recipient company
+  was registered; the bank can read it from the state register). The v1 sets are
+  generated exactly as before, byte for byte. Run: python data/generate.py --v2
+
 Outputs (JSONL, one scenario per line) go next to this file.
 """
 from __future__ import annotations
@@ -40,6 +49,16 @@ TYPES = {
     "video_call":            ("fraud",  False, True,  6, 4),
 }
 
+# v2 only: red-team bypasses and honest look-alikes (same tuple layout as TYPES)
+TYPES_V2 = {
+    "family_large_transfer": ("normal", True,  False, 12, 8),
+    "weekly_spending":       ("normal", True,  False, 18, 12),
+    "loan_transfer_known":   ("fraud",  False, False, 12, 8),
+    "loan_transfer_company": ("fraud",  False, False, 15, 10),
+    "slow_drip_days":        ("fraud",  False, True,  12, 8),
+}
+COMPANY_FRAUD = {"loan_transfer_company"}
+
 
 def _iso(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%S") + TZ
@@ -50,9 +69,10 @@ def _round(x: float, step: int = 1000) -> int:
 
 
 class Gen:
-    def __init__(self, seed: int, shifted: bool):
+    def __init__(self, seed: int, shifted: bool, v2: bool = False):
         self.r = random.Random(seed)
         self.shifted = shifted
+        self.v2 = v2
         self.n = 0
 
     # shifted sets perturb amounts and time gaps
@@ -87,8 +107,15 @@ class Gen:
         return f"atm_{self.r.randint(1, 60):03d}"
 
 
+def _loan(g, ev, t0, a, t):
+    r = g.r
+    loan = _round(r.uniform(1_500_000, 3_500_000) * a)
+    ev["loan_issued_at"] = _iso(t0 - timedelta(hours=r.uniform(0.5, 20) * t))
+    return loan
+
+
 def build(g: Gen, typ: str, idx: int, split: str) -> dict:
-    label, hard, evasion, _, _ = TYPES[typ]
+    label, hard, evasion, _, _ = {**TYPES, **TYPES_V2}[typ]
     r, a, t = g.r, g.a(), g.t()
     t0 = g.start()
     age = g.age()
@@ -217,6 +244,81 @@ def build(g: Gen, typ: str, idx: int, split: str) -> dict:
         lies = r.random() < 0.7
         _series(g, ops, t0, r.randint(2, 5), (150_000, ATM_LIMIT), a, t, phone_p=0.0, video=True)
 
+    elif typ == "family_large_transfer":
+        # honest: a large sum to a known relative (a flat, a wedding); sometimes from a closed deposit
+        balance = _round(r.uniform(800_000, 4_000_000) * a)
+        if r.random() < 0.25:
+            ev["deposit_closed_early_at"] = _iso(t0 - timedelta(hours=r.uniform(0.5, 12) * t))
+        ops.append(g.op(t0, "app", "transfer", _round(balance * r.uniform(0.3, 0.85)),
+                        payee_type="individual", known=True))
+
+    elif typ == "weekly_spending":
+        # honest: a renovation or a move, several payments over a week; sometimes after a loan
+        balance = _round(r.uniform(1_000_000, 5_000_000) * a)
+        if r.random() < 0.25:
+            balance += _loan(g, ev, t0, a, t)
+        n = r.randint(3, 6)
+        total = balance * r.uniform(0.4, 0.9)
+        ts = t0
+        for _ in range(n):
+            amt = _round(total / n * r.uniform(0.7, 1.3))
+            if r.random() < 0.5:
+                ops.append(g.op(ts, "cash_desk", "cash_withdrawal", amt, terminal="desk_01"))
+            else:
+                ops.append(g.op(ts, "app", "transfer", amt, payee_type="legal", known=r.random() < 0.3))
+            ts = ts + timedelta(hours=r.uniform(10, 40) * t)
+
+    elif typ == "loan_transfer_known":
+        # red team 6: the victim sends the loan to a recipient she already knows
+        age = g.age(45, 78)
+        loan = _loan(g, ev, t0, a, t)
+        balance = loan + _round(r.uniform(50_000, 400_000) * a)
+        lies = r.random() < 0.7
+        ops.append(g.op(t0, "app", "transfer", _round(loan * r.uniform(0.6, 0.95)),
+                        payee_type="individual", known=True))
+
+    elif typ == "loan_transfer_company":
+        # red team 7 and 8: the loan goes to one to three companies (mostly fresh shells)
+        age = g.age(45, 78)
+        loan = _loan(g, ev, t0, a, t)
+        balance = loan + _round(r.uniform(50_000, 400_000) * a)
+        lies = r.random() < 0.7
+        n = r.randint(1, 3)
+        total = loan * r.uniform(0.6, 0.95)
+        ts = t0
+        for _ in range(n):
+            ops.append(g.op(ts, "app", "transfer", _round(total / n), payee_type="legal", known=False))
+            ts = ts + timedelta(minutes=r.uniform(10, 90) * t)
+
+    elif typ == "slow_drip_days":
+        # red team 10: one modest operation a day for several days, under every 24 h window
+        age = g.age(45, 78)
+        balance = _round(r.uniform(1_500_000, 4_000_000) * a)
+        if r.random() < 0.5:
+            balance += _loan(g, ev, t0, a, t)
+        lies = r.random() < 0.7
+        days = r.randint(4, 7)
+        per = balance * r.uniform(0.6, 0.95) / days
+        ts = t0
+        for _ in range(days):
+            amt = _round(per * r.uniform(0.85, 1.15))
+            if amt <= ATM_LIMIT and r.random() < 0.7:
+                ops.append(g.op(ts, "atm", "cash_withdrawal", amt, terminal=g.atm(),
+                                phone=round(r.uniform(0, 30), 1)))
+            else:
+                ops.append(g.op(ts, "cash_desk", "cash_withdrawal", amt, terminal="desk_01"))
+            ts = ts + timedelta(hours=r.uniform(23, 30) * t)
+
+    if g.v2:
+        # days since the recipient company was registered (None for people and cash)
+        for o in ops:
+            if o["payee_type"] == "legal":
+                p_new = 0.75 if typ in COMPANY_FRAUD else 0.12
+                o["payee_company_age_days"] = (r.randint(5, 170) if r.random() < p_new
+                                               else r.randint(400, 6000))
+            else:
+                o["payee_company_age_days"] = None
+
     # button press ("scammer on the line"): ASSUMPTION ~15% of fraud, ~1% of normal
     p_report = 0.15 if label == "fraud" else 0.01
     if r.random() < p_report:
@@ -246,11 +348,17 @@ def _series(g, ops, t0, n, amt_range, a, t, phone_p, video=False):
         ts = ts + timedelta(minutes=r.uniform(8, 50) * t)
 
 
+SETS = {  # split -> (seed, shifted, count column, v2)
+    "tune": (42, False, 3, False), "holdout": (2026, True, 4, False),
+    "tune2": (4242, False, 3, True), "holdout2": (7171, True, 4, True),
+}
+
+
 def make_set(split: str) -> list[dict]:
-    seed, shifted, col = (42, False, 3) if split == "tune" else (2026, True, 4)
-    g = Gen(seed, shifted)
+    seed, shifted, col, v2 = SETS[split]
+    g = Gen(seed, shifted, v2)
     out = []
-    for typ, spec in TYPES.items():
+    for typ, spec in ({**TYPES, **TYPES_V2} if v2 else TYPES).items():
         for i in range(spec[col]):
             out.append(build(g, typ, i, split))
     g.r.shuffle(out)
@@ -280,6 +388,25 @@ def write_customers(rows_tune: list[dict]) -> None:
             w.writerow([cid, b, m, age])
 
 
+def main_v2() -> None:
+    """v2 sets. holdout2 is written once; a frozen one is only checked, never overwritten."""
+    tune = make_set("tune2")
+    write_jsonl(HERE / "scenarios_tune2.jsonl", tune)
+    print(f"tune2: {len(tune)} scenarios")
+    path, lock = HERE / "scenarios_holdout2.jsonl", HERE / "HOLDOUT2.sha256"
+    hold = make_set("holdout2")
+    if lock.exists():
+        tmp = HERE / "_holdout2_check.jsonl"
+        write_jsonl(tmp, hold)
+        same = sha256(tmp) == lock.read_text().strip()
+        tmp.unlink()
+        print("holdout2: frozen; regenerated bytes " + ("match" if same else "DO NOT MATCH") + " the lock")
+        return
+    write_jsonl(path, hold)
+    lock.write_text(sha256(path) + "\n", encoding="utf-8")
+    print(f"holdout2: {len(hold)} scenarios, sha256 {sha256(path)[:16]}... (frozen)")
+
+
 def main(include_holdout: bool = True) -> None:
     tune = make_set("tune")
     write_jsonl(HERE / "scenarios_tune.jsonl", tune)
@@ -294,4 +421,5 @@ def main(include_holdout: bool = True) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    main_v2() if "--v2" in sys.argv else main()
