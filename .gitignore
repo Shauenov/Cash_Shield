@@ -7,3 +7,5 @@ __pycache__/
 .env
 *.pyc
 state/
+web/public/mediapipe/wasm/
+web/public/mediapipe/pose_landmarker_lite.task

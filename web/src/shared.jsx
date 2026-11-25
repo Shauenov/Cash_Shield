@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { api, T, kzt } from './api.js'
+import { api, kzt } from './api.js'
+import { LANGS, reasonText, useLang, useT } from './i18n.jsx'
 
 export function useCustomers() {
   const [list, setList] = useState([])
@@ -16,46 +17,102 @@ export function useCustomers() {
   return { list, cid, setCid, reload, current: list.find(c => c.customer_id === cid) }
 }
 
+/** Demo customer name in the current language; unknown ids fall back to the name from the API. */
+export function useCustomerName() {
+  const t = useT()
+  return (id, fallback) => { const k = `c.${id}`, v = t(k); return v === k ? (fallback || id) : v }
+}
+
 export function CustomerSelect({ ctl }) {
+  const t = useT(), name = useCustomerName()
   return (
-    <label>Customer
+    <label>{t('customer')}
       <select value={ctl.cid} onChange={e => ctl.setCid(e.target.value)}>
-        {ctl.list.map(c => <option key={c.customer_id} value={c.customer_id}>{c.name}</option>)}
+        {ctl.list.map(c => <option key={c.customer_id} value={c.customer_id}>{name(c.customer_id, c.name)}</option>)}
       </select>
     </label>
   )
 }
 
-export function Lang({ lang, setLang }) {
+/** Language switch. Without props it changes the language of the whole interface. */
+export function Lang({ value, onChange, label }) {
+  const g = useLang(), t = useT()
+  const cur = value ?? g.lang, set = onChange ?? g.setLang
   return (
-    <span className="lang" role="group" aria-label="Language">
-      <button className={lang === 'en' ? 'on' : ''} onClick={() => setLang('en')}>EN</button>
-      <button className={lang === 'kz' ? 'on' : ''} onClick={() => setLang('kz')}>KZ</button>
-      <button className={lang === 'ru' ? 'on' : ''} onClick={() => setLang('ru')}>RU</button>
+    <span className="lang" role="group" aria-label={label || t('language')}>
+      {LANGS.map(([k, l]) => <button key={k} className={cur === k ? 'on' : ''} aria-pressed={cur === k} onClick={() => set(k)}>{l}</button>)}
     </span>
   )
 }
 
-/** Centred page heading: the first word in the accent colour, a muted line under it. */
-export function PageTitle({ accent, rest, sub }) {
+/** Left-aligned page heading with optional actions on the right. */
+export function PageHead({ title, sub, actions }) {
   return (
-    <div className="page-title">
-      <h1><em>{accent}</em> {rest}</h1>
-      {sub && <p>{sub}</p>}
+    <div className="page-head">
+      <div><h1>{title}</h1>{sub && <p>{sub}</p>}</div>
+      {actions && <div className="actions">{actions}</div>}
     </div>
   )
 }
 
-export const Balance = ({ value }) => <span className="balance"><span className="muted">Balance</span><b>{kzt(value)}</b></span>
+export const Balance = ({ value }) => { const t = useT(); return <span className="balance"><span className="muted">{t('balance')}</span><b>{kzt(value)}</b></span> }
 
-export const Pill = ({ d }) => <span className={`pill ${['allow', 'ask', 'pause', 'hold'].includes(d) ? d : 'other'}`}>{d}</span>
+const KNOWN = ['allow', 'ask', 'pause', 'hold']
+export const Pill = ({ d }) => { const t = useT(); const k = KNOWN.includes(d); return <span className={`pill ${k ? d : 'other'}`}>{k ? t(`d.${d}`) : d}</span> }
 
 export function Reasons({ reasons }) {
-  if (!reasons?.length) return <p className="muted">No risk signals.</p>
+  const t = useT(), { lang } = useLang()
+  if (!reasons?.length) return <p className="muted">{t('noSignals')}</p>
   return (
     <ul className="reasons">
-      {reasons.map(r => <li key={r.signal}><b>{r.signal}</b> {r.contribution > 0 ? '+' : ''}{r.contribution}: {r.text_en || r.text_ru}</li>)}
+      {reasons.map(r => (
+        <li key={r.signal}><span className="sig">{r.signal}</span>
+          <span className="pts">{r.contribution > 0 ? '+' : ''}{r.contribution}</span>
+          <span>{reasonText(r, lang)}</span></li>
+      ))}
     </ul>
+  )
+}
+
+// Decision bands of the frozen v1 rules (engine/rules.yaml). The demo runs on v1.
+export const BANDS = [['allow', 0, 40], ['ask', 40, 55], ['pause', 55, 85], ['hold', 85, 100]]
+
+/** Score on the 0-100 scale with the four decision bands; the band the score falls in is solid. */
+export function RiskRuler({ score, decision }) {
+  const s = Math.max(0, Math.min(100, score ?? 0))
+  const t = useT()
+  const hit = BANDS.find(([, lo, hi]) => s >= lo && (s < hi || hi === 100))?.[0]
+  return (
+    <div className="ruler">
+      <div className="ruler-head">
+        <span className="score">{score}</span>
+        <span className="of">{t('scoreOf')}</span>
+        {decision && <Pill d={decision} />}
+      </div>
+      <div className="ruler-track" role="img" aria-label={t('scoreAria', { score })}>
+        {BANDS.map(([k, lo, hi]) => <span key={k} className={`band ${k} ${k === hit ? 'hit' : ''}`} style={{ width: `${hi - lo}%` }} />)}
+        <span className="ruler-marker" style={{ left: `${s}%` }} />
+      </div>
+      <div className="ruler-scale" aria-hidden="true">
+        {[0, 40, 55, 85, 100].map(v => <span key={v} style={{ left: `${v}%` }}>{v}</span>)}
+      </div>
+    </div>
+  )
+}
+
+const ICON = {
+  ok: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>,
+  stop: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 7v6M12 17h.01" /></svg>,
+}
+/** Final customer-facing state: a mark, one sentence, an optional detail and the next action. */
+export function Outcome({ ok, text, children, action, onAction }) {
+  return (
+    <div className={`outcome ${ok ? 'ok' : 'stop'}`}>
+      <span className="mark">{ICON[ok ? 'ok' : 'stop']}</span>
+      <span className="big">{text}</span>
+      {children}
+      {action && <button onClick={onAction}>{action}</button>}
+    </div>
   )
 }
 
@@ -120,28 +177,28 @@ export function useFlow() {
   return { phase, dec, err, busy, submit, answer, reset }
 }
 
-export function QuestionBlock({ lang, flow }) {
-  const t = T[lang]
+export function QuestionBlock({ flow }) {
+  const t = useT()
   return (
     <>
-      <h1>{t.question}</h1>
+      <h1>{t('question')}</h1>
       <div className="pair">
         {/* two equal buttons so the screen does not push the customer toward one answer */}
-        <button className="secondary" disabled={flow.busy} onClick={() => flow.answer('yes')}>{t.yes}</button>
-        <button className="secondary" disabled={flow.busy} onClick={() => flow.answer('no')}>{t.no}</button>
+        <button className="secondary" disabled={flow.busy} onClick={() => flow.answer('yes')}>{t('yes')}</button>
+        <button className="secondary" disabled={flow.busy} onClick={() => flow.answer('no')}>{t('no')}</button>
       </div>
     </>
   )
 }
 
-export function PauseBlock({ lang, dec, extra }) {
-  const t = T[lang]
+export function PauseBlock({ dec, extra }) {
+  const t = useT()
   return (
     <>
-      <h1>⏸ {t.pause1}</h1>
+      <h1>{t('pause1')}</h1>
       <Countdown seconds={dec?.pause_seconds_left} />
-      <p>{t.pause2}</p>
-      <p>{t.pause3}</p>
+      <p>{t('pause2')}</p>
+      <p>{t('pause3')}</p>
       {extra}
     </>
   )

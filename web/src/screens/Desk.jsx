@@ -1,72 +1,80 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { kzt } from '../api.js'
-import { Balance, CustomerSelect, PageTitle, Pill, Reasons, useCustomers, useFlow } from '../shared.jsx'
-
-const SCRIPT = {
-  en: 'Ask: "Has anyone asked you to withdraw this money and not tell anyone?"',
-  kz: 'Сұраңыз: «Сізден біреу осы ақшаны шешіп, ешкімге айтпауды сұрады ма?»',
-}
+import { tr, useLang, useT } from '../i18n.jsx'
+import { CustomerSelect, Lang, PageHead, Reasons, RiskRuler, useCustomers, useFlow } from '../shared.jsx'
 
 export default function Desk() {
   const ctl = useCustomers()
   const flow = useFlow()
+  const t = useT(), { lang } = useLang()
   const [amount, setAmount] = useState(2500000)
-  const [lang, setLang] = useState('en')
+  // the teller reads the question in the customer's language, which may differ from the interface
+  const [scriptLang, setScriptLang] = useState(lang)
+  useEffect(() => setScriptLang(lang), [lang])
   const [handed, setHanded] = useState(false)
   const d = flow.dec
+  const busy = flow.phase !== 'form'
+  const amt = (v) => ({ amount: kzt(v) })
 
-  const go = () => { setHanded(false); flow.submit({ customer_id: ctl.cid, channel: 'cash_desk', type: 'cash_withdrawal', amount_kzt: Number(amount), terminal_id: 'desk_01' }) }
+  const go = () => { setHanded(false); setScriptLang(lang); flow.submit({ customer_id: ctl.cid, channel: 'cash_desk', type: 'cash_withdrawal', amount_kzt: Number(amount), terminal_id: 'desk_01' }) }
   const finish = () => { flow.reset(); ctl.reload() }
   const ended = ['done', 'released', 'declined', 'expired', 'nofunds'].includes(flow.phase)
 
   return (
     <main>
-      <PageTitle accent="Cash desk" rest="teller screen"
-        sub="Large sums go through the cash desk. The same engine gives the teller the reasons and the words to say." />
-      {flow.phase === 'form' && (
-        <div className="card">
-          <h2>Cash payout</h2>
-          <p className="card-sub">Customer at the counter asks for cash.</p>
-          <div className="row">
-            <CustomerSelect ctl={ctl} />
-            <label>Amount, ₸<input type="number" step="50000" value={amount} onChange={e => setAmount(e.target.value)} /></label>
-            <button disabled={flow.busy} onClick={go}>Pay out {kzt(Number(amount))}</button>
-          </div>
-          <p style={{ marginTop: 16 }}><Balance value={ctl.current?.balance} /></p>
+      <PageHead title={t('desk.title')} sub={t('desk.sub')} />
+      <div className="desk">
+        <section className="surface stack" aria-label={t('desk.request')}>
+          <h2>{t('desk.request')}</h2>
+          <CustomerSelect ctl={ctl} />
+          <label>{t('amount')}<input type="number" step="50000" value={amount} disabled={busy} onChange={e => setAmount(e.target.value)} /></label>
+          <div className="facts muted">{t('balance')} <b className="num" style={{ color: 'var(--ink)' }}>{kzt(ctl.current?.balance)}</b></div>
+          <button disabled={flow.busy || busy} onClick={go}>{t('desk.check', amt(Number(amount)))}</button>
           {flow.err && <p role="alert" className="alert">{flow.err}</p>}
-        </div>
-      )}
-      {flow.phase !== 'form' && d && (
-        <div className="card">
-          {d.score != null && <><h2>Risk score {d.score} <Pill d={d.decision} /></h2>
-            <Reasons reasons={d.reasons} /></>}
-          {flow.phase === 'done' && <p className="ok-note">✔ Payout completed: {kzt(d.amount_kzt)}.</p>}
-          {flow.phase === 'question' && (
+        </section>
+
+        <section className="surface stack" aria-label={t('desk.decision')} aria-live="polite">
+          {!d && (
+            <div className="waiting">
+              <h3 style={{ color: 'var(--ink)' }}>{t('desk.idle')}</h3>
+              <p>{t('desk.idleHint')}</p>
+            </div>
+          )}
+          {d && (
             <>
-              <div className="hint">
-                {SCRIPT[lang]}
-                <span style={{ marginLeft: 12 }}><button className="small secondary" onClick={() => setLang(lang === 'en' ? 'kz' : 'en')}>EN / KZ</button></span>
-              </div>
-              <div className="pair">
-                <button className="secondary" onClick={() => flow.answer('yes')}>Customer: yes, they asked me</button>
-                <button className="secondary" onClick={() => flow.answer('no')}>Customer: no, own decision</button>
-              </div>
+              {d.score != null && <RiskRuler score={d.score} decision={d.decision} />}
+              {d.score != null && <Reasons reasons={d.reasons} />}
+              {flow.phase === 'done' && <p className="note ok">{t('desk.ok', amt(d.amount_kzt))}</p>}
+              {flow.phase === 'question' && (
+                <>
+                  <div className="note script">
+                    <span lang={scriptLang === 'kz' ? 'kk' : scriptLang}>{tr(scriptLang, 'desk.script')}</span>
+                    <Lang value={scriptLang} onChange={setScriptLang} label={t('desk.scriptLang')} />
+                  </div>
+                  <div className="pair">
+                    <button className="secondary" onClick={() => flow.answer('yes')}>{t('desk.yes')}</button>
+                    <button className="secondary" onClick={() => flow.answer('no')}>{t('desk.no')}</button>
+                  </div>
+                </>
+              )}
+              {flow.phase === 'pause' && (
+                <>
+                  <div className="note stop">{t('desk.stop')}</div>
+                  <div className="row" style={{ alignItems: 'center' }}>
+                    <button className="secondary" disabled={handed} onClick={() => setHanded(true)}>{handed ? t('desk.passed') : t('desk.pass')}</button>
+                    <span className="muted">{t('desk.waiting')}</span>
+                  </div>
+                </>
+              )}
+              {flow.phase === 'released' && <p className="note ok">{t('desk.released', amt(d.amount_kzt))}</p>}
+              {flow.phase === 'declined' && <p className="note stop">{t('desk.declined')}</p>}
+              {flow.phase === 'expired' && <p className="note stop">{t('desk.expired')}</p>}
+              {flow.phase === 'nofunds' && <p className="note stop">{t('desk.nofunds')}</p>}
+              {ended && <div><button onClick={finish}>{t('desk.next')}</button></div>}
             </>
           )}
-          {flow.phase === 'pause' && (
-            <>
-              <div className="hint">Do not pay out. Say: "We need a short check. The bank will call you through the app."</div>
-              <p><button className="secondary" disabled={handed} onClick={() => setHanded(true)}>{handed ? 'Passed to officer ✔' : 'Pass to officer'}</button></p>
-              <p className="muted">Waiting for the officer's decision…</p>
-            </>
-          )}
-          {flow.phase === 'released' && <p className="ok-note">✔ Officer released the operation. Pay out {kzt(d.amount_kzt)}.</p>}
-          {flow.phase === 'declined' && <p className="hint">✖ Officer confirmed fraud. Operation cancelled.</p>}
-          {flow.phase === 'expired' && <p className="hint">The pause ended without an officer decision. Operation cancelled; nothing was paid out.</p>}
-          {flow.phase === 'nofunds' && <p className="hint">✖ Not enough money in the account. Nothing was paid out.</p>}
-          {ended && <p style={{ marginTop: 18 }}><button onClick={finish}>Next customer</button></p>}
-        </div>
-      )}
+        </section>
+      </div>
     </main>
   )
 }

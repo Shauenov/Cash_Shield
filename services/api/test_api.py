@@ -338,3 +338,16 @@ def test_telegram_failure_is_logged_not_reported_as_sent(monkeypatch):
         main.DB.commit()
     client.post("/mock-host/authorize", json=body("c_gulnar", 2_500_000, channel="cash_desk"))
     assert "notify_failed" in kinds() and "notify_sent" not in kinds()
+
+
+def test_covered_camera_reaches_the_engine():
+    # Gulnar (loan 3 h ago), 500 000: S1 + S3 = 45 ask; with a covered camera + S15 20 = 65 pause
+    r = client.post("/mock-host/authorize", json=body(extra={"camera_blocked": True})).json()
+    assert r["decision"] == "pause" and r["score"] == 65
+    assert "S15" in [x["signal"] for x in r["reasons"]]
+
+
+def test_camera_blocked_must_be_true_not_truthy():
+    # only a JSON true counts; a string from a broken client does not raise the score
+    r = client.post("/mock-host/authorize", json=body(extra={"camera_blocked": "yes"})).json()
+    assert r["decision"] == "ask" and "S15" not in [x["signal"] for x in r["reasons"]]

@@ -27,10 +27,12 @@ Authorize body (`channel`: atm, cash_desk or app; `type`: cash_withdrawal or tra
   "amount_kzt": 500000,
   "payee_id": null, "payee_type": null, "payee_known": false,
   "terminal_id": "atm_017",
-  "extra": { "phone_at_ear_sec": null }
+  "extra": { "phone_at_ear_sec": null, "camera_blocked": false }
 }
 ```
 
-Decision response: `decision` (`allow`, `ask`, `pause` or `hold`), `score`, `reasons` (`signal`, `contribution`, `text_ru`, `text_en`), `pause_until`, `pause_seconds_left` (by the server clock; screens count down from it), `rules_version`, `latency_ms`.
+`extra.phone_at_ear_sec`: seconds the ATM camera saw a hand at the ear (S10 above 3). `extra.camera_blocked`: `true` if the ATM camera was covered for 2 s or more during the operation (S15); only a JSON `true` counts.
+
+Decision response: `decision` (`allow`, `ask`, `pause` or `hold`), `score`, `reasons` (`signal`, `contribution`, `text_ru`, `text_en`, `text_kz`), `pause_until`, `pause_seconds_left` (by the server clock; screens count down from it), `rules_version`, `latency_ms`.
 
 Errors: 401 bad token or missing officer id, 404 unknown customer or decision (or demo endpoint with `DEMO_MODE` off), 409 closed decision, reused key or operation id, or not enough money at release, 422 bad body or a client `timestamp`.

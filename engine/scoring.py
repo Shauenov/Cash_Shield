@@ -25,7 +25,7 @@ def load_rules(path: Optional[Path] = None) -> dict:
 class Decision:
     decision: str                # allow | ask | pause | hold
     score: int
-    reasons: list = field(default_factory=list)  # [{signal, contribution, text_ru}]
+    reasons: list = field(default_factory=list)  # [{signal, contribution, text_ru, text_en, text_kz}]
     rules_version: str = ""
 
 
@@ -37,6 +37,8 @@ def _signal_list(rules: dict):
     ]
     if rules.get("camera_enabled", True):
         fns.append(sg.s10_phone_at_ear)
+        if "S15" in rules["weights"]:   # rules without S15 behave exactly as frozen
+            fns.append(sg.s15_camera_blocked)
     # v2 signals run only when the rules weight them, so v1 rules behave exactly as frozen
     for code, fn in (("S12", sg.s12_loan_money_out), ("S13", sg.s13_week_drain),
                      ("S14", sg.s14_young_company)):
@@ -62,14 +64,16 @@ def decide(op: Operation, cust: Customer, events: Events,
     for fn in _signal_list(rules):
         hit = fn(op, cust, events, history, p)
         if hit:
-            hits[hit[0]] = (hit[1], hit[2])
+            hits[hit[0]] = hit[1:]
     # S7 is a combination of S5 and S6
     if "S5" in hits and "S6" in hits:
-        hits["S7"] = ("Связка: депозит закрыт и перевод новому получателю", "Combination: deposit closed and transfer to a new recipient")
+        hits["S7"] = ("Связка: депозит закрыт и перевод новому получателю",
+                      "Combination: deposit closed and transfer to a new recipient",
+                      "Байланыс: депозит жабылып, жаңа алушыға аударым жасалды")
 
     reasons = [
-        {"signal": code, "contribution": w[code], "text_ru": ru, "text_en": en}
-        for code, (ru, en) in hits.items()
+        {"signal": code, "contribution": w[code], "text_ru": ru, "text_en": en, "text_kz": kz}
+        for code, (ru, en, kz) in hits.items()
     ]
     reasons.sort(key=lambda r: -abs(r["contribution"]))
     score = max(0, min(100, sum(r["contribution"] for r in reasons)))

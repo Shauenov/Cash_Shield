@@ -162,6 +162,34 @@ def test_s10_camera_threshold():
     assert "S10" in codes(on) and "S10" not in codes(off)
 
 
+def test_s15_camera_covered():
+    r = with_overrides(RULES, weights={"S15": 20})
+    d = run(op(amount=10_000, camera_blocked=True), rules=r)
+    assert codes(d) == {"S15"} and d.score == 20 and d.decision == "allow"
+    assert all(x["text_ru"] and x["text_en"] and x["text_kz"] for x in d.reasons)
+    assert "S15" not in codes(run(op(amount=10_000), rules=r))
+
+
+def test_s15_runs_only_when_weighted():
+    # rules.start.yaml has no S15: a covered camera changes nothing there
+    assert "S15" not in codes(run(op(amount=10_000, camera_blocked=True)))
+
+
+def test_s15_off_when_camera_disabled():
+    r = with_overrides(RULES, weights={"S15": 20}, camera_enabled=False)
+    assert "S15" not in codes(run(op(amount=10_000, camera_blocked=True), rules=r))
+
+
+def test_s15_with_fresh_loan_pauses_on_frozen_rules():
+    # frozen rules: S1 30 + S3 15 + S15 20 = 65 -> pause (without the covered camera: 45 -> ask)
+    frozen = load_rules()
+    ev = Events(loan_issued_at=NOW - timedelta(hours=3))
+    covered = run(op(amount=500_000, camera_blocked=True), cust(balance=3_000_000), ev=ev, rules=frozen)
+    open_ = run(op(amount=500_000), cust(balance=3_000_000), ev=ev, rules=frozen)
+    assert (covered.score, covered.decision) == (65, "pause")
+    assert (open_.score, open_.decision) == (45, "ask")
+
+
 def test_camera_disabled_ignores_s10():
     r = with_overrides(RULES, camera_enabled=False)
     assert "S10" not in codes(run(op(amount=10_000, phone_at_ear_sec=30), rules=r))
@@ -208,7 +236,7 @@ def test_every_non_allow_decision_has_reasons():
     ]
     for d in cases:
         assert d.decision != "allow"
-        assert d.reasons and all(r["text_ru"] for r in d.reasons)
+        assert d.reasons and all(r["text_ru"] and r["text_en"] and r["text_kz"] for r in d.reasons)
 
 
 def test_reason_contributions_sum_to_score():

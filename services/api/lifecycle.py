@@ -37,6 +37,7 @@ class OpRequest:
     terminal_id: Optional[str] = None
     phone_at_ear_sec: Optional[float] = None
     payee_company_age_days: Optional[int] = None
+    camera_blocked: bool = False
 
 
 @dataclass
@@ -111,7 +112,7 @@ class Lifecycle:
                         balance_7d_start=balance + sum(h.amount for h in week))
         op = Operation(req.operation_id, ts, req.channel, req.type, req.amount, req.payee_id,
                        req.payee_type, req.payee_known, req.terminal_id, req.phone_at_ear_sec,
-                       req.payee_company_age_days)
+                       req.payee_company_age_days, req.camera_blocked)
         try:
             res = _POOL.submit(self.engine, op, cust, self.ledger.events(cid), hist).result(timeout=self.timeout)
             if res is None:

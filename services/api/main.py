@@ -286,7 +286,8 @@ def make_decision(body: OpIn) -> dict:
         raise HTTPException(422, "timestamp is set by the host; omit it")
     req = OpRequest(body.operation_id, body.customer_id, body.channel, body.type, body.amount_kzt,
                     body.payee_id, body.payee_type, body.payee_known, body.terminal_id,
-                    (body.extra or {}).get("phone_at_ear_sec"), body.payee_company_age_days)
+                    (body.extra or {}).get("phone_at_ear_sec"), body.payee_company_age_days,
+                    (body.extra or {}).get("camera_blocked") is True)
     t0 = time.perf_counter()   # real time: latency is not affected by the demo clock
     try:
         out = LIFECYCLE.submit(req)

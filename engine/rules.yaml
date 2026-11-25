@@ -10,6 +10,7 @@ weights:
   S8: 40
   S9: -15
   S10: 10
+  S15: 20   # camera covered (2026-11-25): set by reasoning, not tuned, see docs/camera.md
   S11: 20
 params:
   window_hours: 24
