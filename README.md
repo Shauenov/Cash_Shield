@@ -93,7 +93,7 @@ cd web && npm install && npm run dev      # http://localhost:5173
 
 Demo customers: Gulnar apa (loan 3 h ago), Marat (control), Aigerim (deposit closed 1 h ago), Serik (buying a car), Bolat (cash desk), Dana. The **Reset demo** button in the officer console restores them.
 
-Demo: the 3-minute script is in `docs/demo-script.md`. A silent, captioned backup walkthrough built from real screenshots of the running app is `pitch/demo-backup.mp4` (about 70 seconds; rebuild with `python pitch/make_video.py`). It is a walkthrough, not a screen recording with narration.
+Demo: the 3-minute script is in `docs/demo-script.md`. A silent backup walkthrough with Russian captions, built from real screenshots of the running app (Russian interface, captured 2026-11-25), is `pitch/demo-backup.mp4` (69 seconds; rebuild with `python pitch/make_video.py`). The pitch deck (Russian, 10 slides) is in `pitch/deck-source/`. It is a walkthrough, not a screen recording with narration.
 
 ## 4. Metrics (holdout, measured once)
 

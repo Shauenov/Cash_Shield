@@ -10,6 +10,7 @@ All scores below come from the frozen rules and were checked by `python eval/dem
    - **Right (bank side):** `http://localhost:8080/#officer`
 3. In the right window click **Reset demo**. The stat tiles must show zeros.
 4. Left window: customer **Gulnar apa**, amount **500000**, ATM **ATM 017**, camera **Off**.
+   Language: the **EN / RU / KZ** buttons in the top bar switch the whole interface (the choice is kept). For a Russian pitch press **RU** in both windows: the labels below are the English ones (**Withdraw** = «Снять», **New operation** = «Новая операция», **Reset demo** = «Сбросить демо», **Release** = «Снять паузу»).
 5. Open two more tabs in the left window for the cash desk (`#desk`) and the app (`#app`).
 6. Telegram: if you want the daughter's phone to buzz, set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_DEMO_CHAT_ID` in `.env`, restart, and keep a phone in hand. **Without them the message is only simulated** (the console shows "simulated: Daughter Aliya"): then do not say the phone buzzed.
 7. Have the backup video and the slides PDF open on a second laptop.

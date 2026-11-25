@@ -1,7 +1,7 @@
 """Builds pitch/demo-backup.mp4 from the captured screens in pitch/demo-frames/.
 
-The frames are real screenshots of the running app (Docker stack, localhost:8080),
-captured step by step. The video has captions and no audio.
+The frames are real screenshots of the running app (production build, Russian interface),
+captured step by step on 2026-11-25. The video has Russian captions and no audio.
 Run: python pitch/make_video.py
 """
 from pathlib import Path
@@ -55,8 +55,8 @@ def card(lines, secs):
 
 def shot(n, caption, secs=6):
     src = Image.open(HERE / "demo-frames" / f"{n:02d}.jpg").convert("RGB")
-    scale = 2.0
-    s = src.resize((int(src.width * scale), int(src.height * scale)), Image.LANCZOS)  # 1154x648
+    scale = min((W - 40) / src.width, (H - 80) / src.height)   # fit above the caption band
+    s = src.resize((int(src.width * scale), int(src.height * scale)), Image.LANCZOS)
     img = Image.new("RGB", (W, H), BG)
     img.paste(s, ((W - s.width) // 2, 8))
     d = ImageDraw.Draw(img)
@@ -73,24 +73,24 @@ def shot(n, caption, secs=6):
 def main():
     seq = [
         card([("Cash Shield (Sabyr)", 64, True, INK),
-              ("Backup walkthrough of the live demo", 36, False, ACC),
-              ("Real screens of the running app, captured step by step. No audio.", 30, False, MUTED),
-              ("All data is synthetic. The bank's authorization host is mocked.", 30, False, MUTED)], 5),
-        shot(1, "1. Gülnar apa (a made-up customer) is at the ATM. A loan 3 hours ago. Balance 3 000 000 ₸."),
-        shot(2, "2. First 500 000 ₸ withdrawal: score 45, so the ATM asks one question."),
-        shot(3, "3. The scammer taught her to answer No. The cash comes out. This loss is shown on purpose."),
-        shot(4, "4. Second withdrawal, other ATM, camera off: score 95. The ATM stops and dispenses nothing."),
-        shot(5, "5. Cash desk, Bolat, 2 500 000 ₸: score 65. The teller sees the reasons: do not pay out."),
-        shot(6, "6. App, Aigerim: deposit closed, 2 000 000 ₸ to a new person: score 75, 30-minute pause."),
-        shot(7, "7. Officer console: three held cases, each with its reasons. 1 trusted person notified (simulated).", 7),
-        shot(8, "8. Releasing a false alarm needs a written comment from the officer."),
-        shot(9, "9. Released. The counter shows 1 false alarm; the other two stay on hold."),
-        card([("Result on 180 synthetic scenarios, measured once", 40, True, INK),
-              ("78.3% of fraud stopped (target 85%, missed)", 36, False, ACC),
-              ("4.2% of normal customers bothered, 0% paused", 36, False, ACC),
-              ("Age fairness gap 8.3 pp: FAIL (limit 8 pp)", 36, False, (255, 142, 134)),
-              ("Scripted red team: 4 of 10 attempts got through", 36, False, (242, 184, 75)),
-              ("Reproduce: python tasks.py eval", 30, False, MUTED)], 9),
+              ("Запасная запись живого демо", 36, False, ACC),
+              ("Настоящие экраны работающего приложения, снятые по шагам. Без звука.", 30, False, MUTED),
+              ("Все данные синтетические. Хост авторизации банка имитирован.", 30, False, MUTED)], 5),
+        shot(1, "1. Гүлнар апа (вымышленная клиентка) у банкомата. Кредит взят 3 часа назад, баланс 3 000 000 ₸."),
+        shot(2, "2. Первое снятие 500 000 ₸: 45 баллов, банкомат задаёт один вопрос."),
+        shot(3, "3. Мошенник научил её отвечать «нет». Наличные выданы: эту потерю показываем намеренно."),
+        shot(4, "4. Второе снятие, другой банкомат, камера выключена: 95 баллов. Банкомат ничего не выдаёт."),
+        shot(5, "5. Касса, Болат, 2 500 000 ₸: 65 баллов. Кассир видит причины и что сказать: не выдавать."),
+        shot(6, "6. Приложение, Айгерим: вклад закрыт, 2 000 000 ₸ новому получателю: 75 баллов, пауза 30 минут."),
+        shot(7, "7. Консоль офицера: три операции ждут решения, у каждой причины. Доверенное лицо уведомлено (имитация).", 7),
+        shot(8, "8. Чтобы снять ложную тревогу, офицер обязан написать комментарий."),
+        shot(9, "9. Пауза снята: счётчик показывает 1 ложную тревогу, две операции остаются на удержании."),
+        card([("Итог на 180 синтетических сценариях, замер один раз", 40, True, INK),
+              ("Остановлено 78,3% мошенничества (цель 85% не достигнута)", 34, False, ACC),
+              ("Потревожено 4,2% честных клиентов, на паузе 0%", 34, False, ACC),
+              ("Разница ложных тревог по возрасту 8,3 п.п.: FAIL (предел 8)", 34, False, (255, 142, 134)),
+              ("Правила v2 на новой выборке: 67,4% -> 76,7%, демо на v1", 34, False, (242, 184, 75)),
+              ("Повторить: python tasks.py eval", 30, False, MUTED)], 9),
     ]
     out = HERE / "demo-backup.mp4"
     with imageio.get_writer(out, fps=FPS, codec="libx264", quality=7, pixelformat="yuv420p",
