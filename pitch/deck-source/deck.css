@@ -37,7 +37,7 @@ section.light .card { background: #FFFFFF; border: 2px solid #C9D8D2; }
 .card h3 { margin-bottom: 14px; }
 .card p { font-size: 28px; }
 .card.hot { border: 4px solid #3DDC97; }
-.big { font-family: 'Unbounded', Arial, sans-serif; font-size: 88px; font-weight: 600; line-height: 1; letter-spacing: -2px; }
+.big, .card .big { font-family: 'Unbounded', Arial, sans-serif; font-size: 88px; font-weight: 600; line-height: 1; letter-spacing: -2px; }
 section.light .big { color: #0E7A52; }
 .small { font-size: 24px; }
 .amber { color: #F2B84B; }
